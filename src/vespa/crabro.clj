@@ -1,5 +1,6 @@
 (ns vespa.crabro
-  (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable
+  (:use [clojure.java.io :only [file]])
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
                     ObjectInputStream ObjectOutputStream)
            (java.net InetAddress)
            (java.util UUID)
@@ -57,22 +58,49 @@
   ([host port]
      (let [username (str (UUID/randomUUID))
            password (str (UUID/randomUUID))
-           config (doto (ConfigurationImpl.)
-                    (.setPersistenceEnabled false)
-                    (.setSecurityEnabled true)
-                    (.setSharedStore false))
+           tmp-dir (System/getProperty "java.io.tmpdir")
+           config (ConfigurationImpl.)
+           journal-dir (.getAbsolutePath
+                        (file tmp-dir
+                              username
+                              (.getJournalDirectory config)))
+           bindings-dir (.getAbsolutePath
+                         (file tmp-dir
+                               username
+                               (.getBindingsDirectory config)))
+           large-messages-dir (.getAbsolutePath
+                               (file tmp-dir
+                                     username
+                                     (.getLargeMessagesDirectory config)))
+           paging-dir (.getAbsolutePath
+                       (file tmp-dir
+                             username
+                             (.getPagingDirectory config)))
            acceptor-configs (doto (.getAcceptorConfigurations config)
                               (.add (-> NettyAcceptorFactory .getName
                                         (TransportConfiguration.
                                          {"port" port
                                           "host" host}))))
            server (doto (EmbeddedHornetQ.)
-                    (.setConfiguration config)
+                    (.setConfiguration
+                     (doto config
+                       (.setJournalDirectory journal-dir)
+                       (.setBindingsDirectory bindings-dir)
+                       (.setLargeMessagesDirectory large-messages-dir)
+                       (.setPagingDirectory paging-dir)
+                       (.setPersistenceEnabled false)
+                       (.setSecurityEnabled true)
+                       (.setSharedStore false)))
                     (.setSecurityManager (security-manager username password))
                     (.start))]
        (reify
          Closeable
-         (close [_] (.stop server))
+         (close [_]
+           (.stop server)
+           (doseq [f [journal-dir bindings-dir large-messages-dir paging-dir]]
+             (.delete (file f)))
+           (.delete (.getParentFile (file journal-dir)))
+           (.delete (.getParentFile (.getParentFile (file journal-dir)))))
          IHaveACookie
          (cookie [_]
            (Base64/encodeBase64String
