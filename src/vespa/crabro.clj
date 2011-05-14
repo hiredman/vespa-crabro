@@ -1,16 +1,16 @@
 (ns vespa.crabro
-  (:import (org.hornetq.core.server.embedded EmbeddedHornetQ)
-           (org.hornetq.core.server HornetQComponent)
-           (org.hornetq.core.config.impl ConfigurationImpl)
-           (org.hornetq.api.core TransportConfiguration)
-           (org.hornetq.spi.core.security HornetQSecurityManager)
-           (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory NettyConnectorFactory)
-           (org.hornetq.api.core.client HornetQClient)
-           (java.net InetAddress)
-           (java.io Closeable ByteArrayInputStream ByteArrayOutputStream
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable
                     ObjectInputStream ObjectOutputStream)
+           (java.net InetAddress)
+           (java.util UUID)
            (org.apache.commons.codec.binary Base64)
-           (java.util UUID)))
+           (org.hornetq.api.core TransportConfiguration)
+           (org.hornetq.api.core.client HornetQClient)
+           (org.hornetq.core.config.impl ConfigurationImpl)
+           (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory NettyConnectorFactory)
+           (org.hornetq.core.server HornetQComponent)
+           (org.hornetq.core.server.embedded EmbeddedHornetQ)
+           (org.hornetq.spi.core.security HornetQSecurityManager)))
 
 (defn serialize [object]
   (with-open [baos (ByteArrayOutputStream.)
@@ -107,7 +107,7 @@
   (create-queue [mb name]
     (.createQueue session name name))
   (create-tmp-queue [mb name]
-      (.createTemporaryQueue session name name))
+    (.createTemporaryQueue session name name))
   (send-to [mb name msg]
     (try
       (create-queue mb name)
