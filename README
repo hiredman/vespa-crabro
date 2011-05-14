@@ -30,6 +30,11 @@ the "cookie" is a base64 encoded serialized clojure map of connection parameters
   - write cookie to user.home/.vespa-cookie
   - reuse existing cookie in that location
   - support some kind of -D to overide
+* Simple Client Entry Point
+  - reads cookie from user.home/.vaspa-cookie
+* Decompose and Expose
+  - give access to hornetq internals
+  - make easy ramp up from vespa-crabro to using hornetq api directly
 
 ## License
 
