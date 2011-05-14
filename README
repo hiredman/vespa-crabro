@@ -1,0 +1,29 @@
+# vespa-crabro
+
+dirt simple distributed message queues for clojure, built on hornetq
+
+## Usage
+
+vespa.crabro> (def server (create-server))
+#'vespa.crabro/server
+vespa.crabro> (def mb (message-bus (cookie server)))
+#'vespa.crabro/mb
+vespa.crabro> (send-to mb "foo" {:x 1})
+nil
+vespa.crabro> (receive-from mb "foo" println)
+{:x 1}
+nil
+vespa.crabro> (def mb2 (.clone mb))
+#'vespa.crabro/mb2
+vespa.crabro> (send-to mb2 "foo" {:x 2})
+nil
+vespa.crabro> (receive-from mb "foo" println)
+{:x 2}
+nil
+vespa.crabro> 
+
+## License
+
+Copyright (C) 2011 Kevin Downey
+
+Distributed under the Eclipse Public License, the same as Clojure.
