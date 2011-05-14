@@ -15,24 +15,24 @@
            (org.hornetq.spi.core.logging LogDelegate LogDelegateFactory)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
 
-(defn serialize [object]
+(defn- serialize [object]
   (with-open [baos (ByteArrayOutputStream.)
               oos (ObjectOutputStream. baos)]
     (.writeObject oos object)
     (.toByteArray baos)))
 
-(defn deserialize [bytes]
+(defn- deserialize [bytes]
   (with-open [bais (ByteArrayInputStream. bytes)
               ois (ObjectInputStream. bais)]
     (.readObject ois)))
 
-(defn hostname []
+(defn- hostname []
   (.getHostName (InetAddress/getLocalHost)))
 
 (defprotocol IHaveACookie
   (cookie [obj]))
 
-(defn security-manager [username password]
+(defn- security-manager [username password]
   (reify
     HornetQSecurityManager
     (validateUser [sm user pw]
@@ -52,14 +52,17 @@
     (stop [sm])
     (isStarted [sm] true)))
 
-(def log (agent PersistentQueue/EMPTY))
+(def ^{:doc "hornetq log messages are redirected to this queue, put a watch on the agent if
+  you want to do something else with them.
+  format is [date level message & [throwable]]"}
+  log (agent PersistentQueue/EMPTY))
 
-(defn trim-log [log]
+(defn- trim-log [log]
   (if (> (count log) 10)
     (-> log pop pop)
     log))
 
-(defn log-append [& stuff]
+(defn- log-append [& stuff]
   (send-off log (fn [log] (conj (trim-log log) stuff))))
 
 (deftype LDF []
@@ -69,7 +72,7 @@
       LogDelegate
       (isInfoEnabled [_] true)
       (isDebugEnabled [_] true)
-      (isTraceEnabled [_] true)
+      (isTraceEnabled [_] false)
       (fatal [_ message]
         (log-append (Date.) :fatal message))
       (fatal [_ message throwable]
