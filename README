@@ -22,6 +22,8 @@ vespa.crabro> (receive-from mb "foo" println)
 nil
 vespa.crabro> 
 
+the "cookie" is a base64 encoded serialized clojure map of connection parameters
+
 ## Todo
 
 * Simple Sever Entry Point
