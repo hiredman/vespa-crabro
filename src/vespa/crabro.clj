@@ -101,12 +101,12 @@
 (defn create-server
   "starts an embedded HornetQ server"
   [& {:as opts}]
-  (let [{:keys [username password host port]} (merge
-                                               {:username (str (UUID/randomUUID))
-                                                :password (str (UUID/randomUUID))
-                                                :host (hostname)
-                                                :port (+ 2000 (rand-int 500))}
-                                               opts)
+  (let [{:keys [username password host port] :as opts} (merge
+                                                        {:username (str (UUID/randomUUID))
+                                                         :password (str (UUID/randomUUID))
+                                                         :host (hostname)
+                                                         :port (+ 2000 (rand-int 500))}
+                                                        opts)
         cxt-loader (.getContextClassLoader (Thread/currentThread))]
     (try
       (.setContextClassLoader (Thread/currentThread) @clojure.lang.Compiler/LOADER)
@@ -158,11 +158,7 @@
             (.delete (.getParentFile (.getParentFile (file journal-dir)))))
           IHaveACookie
           (cookie [_]
-            (Base64/encodeBase64String
-             (serialize {"port" port
-                         "host" host
-                         "user" username
-                         "password" password})))))
+            (Base64/encodeBase64String (serialize opts)))))
       (finally
        (.setContextClassLoader (Thread/currentThread) cxt-loader)))))
 
@@ -184,10 +180,9 @@
 
 (defn message-bus
   ([cookie]
-     (let [{host "host" port "port" user "user" password "password"}
-           (deserialize (Base64/decodeBase64 cookie))
+     (let [{:keys [host port username password]} (deserialize (Base64/decodeBase64 cookie))
            sf (create-session-factory host port)
-           s (.createSession sf user password false true true false 1)]
+           s (.createSession sf username password false true true false 1)]
        (message-bus s sf)))
   ([session session-factory]
      (message-bus session session-factory (atom {}) (.createProducer session)))
