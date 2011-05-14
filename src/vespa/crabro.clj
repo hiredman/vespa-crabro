@@ -52,7 +52,8 @@
     (stop [sm])
     (isStarted [sm] true)))
 
-(def ^{:doc "hornetq log messages are redirected to this queue, put a watch on the agent if
+(def ^{:doc
+       "hornetq log messages are redirected to this queue, put a watch on the agent if
   you want to do something else with them.
   format is [date level message class-or-namespace & [throwable]]"}
   log (agent PersistentQueue/EMPTY))
@@ -101,13 +102,20 @@
 (defn create-server
   "starts an embedded HornetQ server"
   [& {:as opts}]
-  (let [{:keys [username password host port] :as opts} (merge
+  (let [cookie (file (System/getProperty "user.home") ".vespa-cookie")
+        {:keys [username password host port] :as opts} (merge
                                                         {:username (str (UUID/randomUUID))
                                                          :password (str (UUID/randomUUID))
                                                          :host (hostname)
                                                          :port (+ 2000 (rand-int 500))}
+                                                        (when (.exists cookie)
+                                                          (deserialize
+                                                           (Base64/decodeBase64 (slurp cookie))))
                                                         opts)
+        cookie-string (Base64/encodeBase64String (serialize opts))
+        ;; fiddle with the classloader to get the logging class to load
         cxt-loader (.getContextClassLoader (Thread/currentThread))]
+    (spit cookie cookie-string)
     (try
       (.setContextClassLoader (Thread/currentThread) @clojure.lang.Compiler/LOADER)
       (let [tmp-dir (System/getProperty "java.io.tmpdir")
@@ -157,8 +165,7 @@
             (.delete (.getParentFile (file journal-dir)))
             (.delete (.getParentFile (.getParentFile (file journal-dir)))))
           IHaveACookie
-          (cookie [_]
-            (Base64/encodeBase64String (serialize opts)))))
+          (cookie [_] cookie-string)))
       (finally
        (.setContextClassLoader (Thread/currentThread) cxt-loader)))))
 
@@ -179,11 +186,16 @@
   (receive-from [mb name fun]))
 
 (defn message-bus
-  ([cookie]
-     (let [{:keys [host port username password]} (deserialize (Base64/decodeBase64 cookie))
-           sf (create-session-factory host port)
-           s (.createSession sf username password false true true false 1)]
-       (message-bus s sf)))
+  ([]
+     (message-bus
+      (slurp (file (System/getProperty "user.home") ".vespa-cookie"))))
+  ([cookie-or-map]
+     (if (map? cookie-or-map)
+       (let [{:keys [host port username password]} cookie-or-map
+             sf (create-session-factory host port)
+             s (.createSession sf username password false true true false 1)]
+         (message-bus s sf))
+       (message-bus (deserialize (Base64/decodeBase64 cookie-or-map)))))
   ([session session-factory]
      (message-bus session session-factory (atom {}) (.createProducer session)))
   ([session session-factory consumer-cache producer]

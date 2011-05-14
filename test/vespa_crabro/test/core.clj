@@ -4,7 +4,7 @@
 
 (deftest test-vespa-crabro
   (with-open [server (create-server)
-              mb (message-bus (cookie server))]
+              mb (message-bus)]
     (send-to mb "foo" {:x 1})
     (receive-from mb "foo"
                   (fn [x]
