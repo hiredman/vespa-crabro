@@ -127,57 +127,47 @@
   (send-to [mb name msg])
   (receive-from [mb name fun]))
 
-(declare ->X)
-
-(deftype X [session
-            session-factory
-            consumer-cache
-            producer]
-  MessageBus
-  (create-queue [mb name]
-    (.createQueue session name name))
-  (create-tmp-queue [mb name]
-    (.createTemporaryQueue session name name))
-  (send-to [mb name msg]
-    (try
-      (create-queue mb name)
-      (catch Exception _))
-    (let [m (doto (.createMessage session false)
-              (-> .getBodyBuffer (.writeBytes (serialize msg))))]
-      (.send producer name m)))
-  (receive-from [mb name fun]
-    (.start session)
-    (swap! consumer-cache
-           (fn [cache]
-             (if (contains? cache name)
-               cache
-               (assoc cache name (.createConsumer session name)))))
-    (let [c (get @consumer-cache name)
-          m (.receive c)
-          bb (.getBodyBuffer m)
-          buf (byte-array (.readableBytes bb))]
-      (.readBytes bb buf)
-      (let [result (fun (deserialize buf))]
-        (.acknowledge m)
-        result)))
-  Object
-  (clone [mb]
-    (->X session session-factory))
-  Closeable
-  (close [mb]
-    (.stop session)))
-
-(defn ->X
+(defn message-bus
+  ([cookie]
+     (let [{host "host" port "port" user "user" password "password"}
+           (deserialize (Base64/decodeBase64 cookie))
+           sf (create-session-factory host port)
+           s (.createSession sf user password false true true false 1)]
+       (message-bus s sf)))
   ([session session-factory]
-     (->X session session-factory (atom {}) (.createProducer session)))
+     (message-bus session session-factory (atom {}) (.createProducer session)))
   ([session session-factory consumer-cache producer]
-     (X. session session-factory consumer-cache producer)))
-
-(defn message-bus [cookie]
-  (let [{host "host" port "port" user "user" password "password"}
-        (deserialize (Base64/decodeBase64 cookie))
-        sf (create-session-factory host port)
-        s (.createSession sf user password false true true false 1)]
-    (->X s sf)))
-
-
+     (reify
+       MessageBus
+       (create-queue [mb name]
+         (.createQueue session name name))
+       (create-tmp-queue [mb name]
+         (.createTemporaryQueue session name name))
+       (send-to [mb name msg]
+         (try
+           (create-queue mb name)
+           (catch Exception _))
+         (let [m (doto (.createMessage session false)
+                   (-> .getBodyBuffer (.writeBytes (serialize msg))))]
+           (.send producer name m)))
+       (receive-from [mb name fun]
+         (.start session)
+         (swap! consumer-cache
+                (fn [cache]
+                  (if (contains? cache name)
+                    cache
+                    (assoc cache name (.createConsumer session name)))))
+         (let [c (get @consumer-cache name)
+               m (.receive c)
+               bb (.getBodyBuffer m)
+               buf (byte-array (.readableBytes bb))]
+           (.readBytes bb buf)
+           (let [result (fun (deserialize buf))]
+             (.acknowledge m)
+             result)))
+       Object
+       (clone [mb]
+         (message-bus session session-factory))
+       Closeable
+       (close [mb]
+         (.stop session)))))
