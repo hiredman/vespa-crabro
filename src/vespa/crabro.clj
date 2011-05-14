@@ -1,9 +1,10 @@
 (ns vespa.crabro
   (:use [clojure.java.io :only [file]])
-  (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
+  (:import (clojure.lang PersistentQueue)
+           (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
                     ObjectInputStream ObjectOutputStream)
            (java.net InetAddress)
-           (java.util UUID)
+           (java.util Date UUID)
            (org.apache.commons.codec.binary Base64)
            (org.hornetq.api.core TransportConfiguration)
            (org.hornetq.api.core.client HornetQClient)
@@ -11,6 +12,7 @@
            (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory NettyConnectorFactory)
            (org.hornetq.core.server HornetQComponent)
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
+           (org.hornetq.spi.core.logging LogDelegate LogDelegateFactory)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
 
 (defn serialize [object]
@@ -50,66 +52,115 @@
     (stop [sm])
     (isStarted [sm] true)))
 
+(def log (agent PersistentQueue/EMPTY))
+
+(defn trim-log [log]
+  (if (> (count log) 10)
+    (-> log pop pop)
+    log))
+
+(defn log-append [& stuff]
+  (send-off log (fn [log] (conj (trim-log log) stuff))))
+
+(deftype LDF []
+  LogDelegateFactory
+  (createDelegate [_ class]
+    (reify
+      LogDelegate
+      (isInfoEnabled [_] true)
+      (isDebugEnabled [_] true)
+      (isTraceEnabled [_] true)
+      (fatal [_ message]
+        (log-append (Date.) :fatal message))
+      (fatal [_ message throwable]
+        (log-append (Date.) :fatal message throwable))
+      (error [_ message]
+        (log-append (Date.) :error message))
+      (error [_ message throwable]
+        (log-append (Date.) :error message throwable))
+      (warn [_ message]
+        (log-append (Date.) :warn message))
+      (warn [_ message throwable]
+        (log-append (Date.) :warn message throwable))
+      (info [_ message]
+        (log-append (Date.) :info message))
+      (info [_ message throwable]
+        (log-append (Date.) :info message throwable))
+      (debug [_ message]
+        (log-append (Date.) :debug message))
+      (debug [_ message throwable]
+        (log-append (Date.) :debug message throwable))
+      (trace [_ message]
+        (log-append (Date.) :trace message))
+      (trace [_ message throwable]
+        (log-append (Date.) :trace message throwable)))))
+
 (defn create-server
   "starts an embedded HornetQ server"
   ([] (create-server (+ 2000 (rand-int 100))))
   ([port]
      (create-server (hostname) port))
   ([host port]
-     (let [username (str (UUID/randomUUID))
-           password (str (UUID/randomUUID))
-           tmp-dir (System/getProperty "java.io.tmpdir")
-           config (ConfigurationImpl.)
-           journal-dir (.getAbsolutePath
-                        (file tmp-dir
-                              username
-                              (.getJournalDirectory config)))
-           bindings-dir (.getAbsolutePath
-                         (file tmp-dir
-                               username
-                               (.getBindingsDirectory config)))
-           large-messages-dir (.getAbsolutePath
-                               (file tmp-dir
-                                     username
-                                     (.getLargeMessagesDirectory config)))
-           paging-dir (.getAbsolutePath
-                       (file tmp-dir
-                             username
-                             (.getPagingDirectory config)))
-           acceptor-configs (doto (.getAcceptorConfigurations config)
-                              (.add (-> NettyAcceptorFactory .getName
-                                        (TransportConfiguration.
-                                         {"port" port
-                                          "host" host}))))
-           server (doto (EmbeddedHornetQ.)
-                    (.setConfiguration
-                     (doto config
-                       (.setJournalDirectory journal-dir)
-                       (.setBindingsDirectory bindings-dir)
-                       (.setLargeMessagesDirectory large-messages-dir)
-                       (.setPagingDirectory paging-dir)
-                       (.setPersistenceEnabled false)
-                       (.setSecurityEnabled true)
-                       (.setSharedStore false)
-                       (.setClusterUser username)
-                       (.setClusterPassword password)))
-                    (.setSecurityManager (security-manager username password))
-                    (.start))]
-       (reify
-         Closeable
-         (close [_]
-           (.stop server)
-           (doseq [f [journal-dir bindings-dir large-messages-dir paging-dir]]
-             (.delete (file f)))
-           (.delete (.getParentFile (file journal-dir)))
-           (.delete (.getParentFile (.getParentFile (file journal-dir)))))
-         IHaveACookie
-         (cookie [_]
-           (Base64/encodeBase64String
-            (serialize {"port" port
-                        "host" host
-                        "user" username
-                        "password" password})))))))
+     (let [cxt-loader (.getContextClassLoader (Thread/currentThread))]
+       (try
+         (.setContextClassLoader (Thread/currentThread) @clojure.lang.Compiler/LOADER)
+         (let [username (str (UUID/randomUUID))
+               password (str (UUID/randomUUID))
+               tmp-dir (System/getProperty "java.io.tmpdir")
+               config (ConfigurationImpl.)
+               journal-dir (.getAbsolutePath
+                            (file tmp-dir
+                                  username
+                                  (.getJournalDirectory config)))
+               bindings-dir (.getAbsolutePath
+                             (file tmp-dir
+                                   username
+                                   (.getBindingsDirectory config)))
+               large-messages-dir (.getAbsolutePath
+                                   (file tmp-dir
+                                         username
+                                         (.getLargeMessagesDirectory config)))
+               paging-dir (.getAbsolutePath
+                           (file tmp-dir
+                                 username
+                                 (.getPagingDirectory config)))
+               acceptor-configs (doto (.getAcceptorConfigurations config)
+                                  (.add (-> NettyAcceptorFactory .getName
+                                            (TransportConfiguration.
+                                             {"port" port
+                                              "host" host}))))
+               server (doto (EmbeddedHornetQ.)
+                        (.setConfiguration
+                         (doto config
+                           (.setJournalDirectory journal-dir)
+                           (.setBindingsDirectory bindings-dir)
+                           (.setLargeMessagesDirectory large-messages-dir)
+                           (.setPagingDirectory paging-dir)
+                           (.setPersistenceEnabled false)
+                           (.setSecurityEnabled true)
+                           (.setSharedStore false)
+                           (.setClusterUser username)
+                           (.setClusterPassword password)
+                           (.setLogDelegateFactoryClassName "vespa.crabro.LDF")))
+                        (.setSecurityManager (security-manager username password))
+                        (.start))]
+           (reify
+             Closeable
+             (close [_]
+               (.stop server)
+               (doseq [f [journal-dir bindings-dir large-messages-dir paging-dir]]
+                 (.delete (file f)))
+               (.delete (.getParentFile (file journal-dir)))
+               (.delete (.getParentFile (.getParentFile (file journal-dir)))))
+             IHaveACookie
+             (cookie [_]
+               (Base64/encodeBase64String
+                (serialize {"port" port
+                            "host" host
+                            "user" username
+                            "password" password})))))
+         (finally
+          (.setContextClassLoader (Thread/currentThread) cxt-loader))))))
 
 (defn create-session-factory [host port]
   (let [loc (doto (HornetQClient/createServerLocatorWithoutHA
