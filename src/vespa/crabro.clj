@@ -54,7 +54,7 @@
 
 (def ^{:doc "hornetq log messages are redirected to this queue, put a watch on the agent if
   you want to do something else with them.
-  format is [date level message & [throwable]]"}
+  format is [date level message class-or-namespace & [throwable]]"}
   log (agent PersistentQueue/EMPTY))
 
 (defn- trim-log [log]
@@ -74,29 +74,29 @@
       (isDebugEnabled [_] true)
       (isTraceEnabled [_] false)
       (fatal [_ message]
-        (log-append (Date.) :fatal message))
+        (log-append (Date.) :fatal message class))
       (fatal [_ message throwable]
-        (log-append (Date.) :fatal message throwable))
+        (log-append (Date.) :fatal message class throwable))
       (error [_ message]
         (log-append (Date.) :error message))
       (error [_ message throwable]
-        (log-append (Date.) :error message throwable))
+        (log-append (Date.) :error message class throwable))
       (warn [_ message]
         (log-append (Date.) :warn message))
       (warn [_ message throwable]
-        (log-append (Date.) :warn message throwable))
+        (log-append (Date.) :warn message class throwable))
       (info [_ message]
-        (log-append (Date.) :info message))
+        (log-append (Date.) :info message class))
       (info [_ message throwable]
-        (log-append (Date.) :info message throwable))
+        (log-append (Date.) :info message class throwable))
       (debug [_ message]
-        (log-append (Date.) :debug message))
+        (log-append (Date.) :debug message class))
       (debug [_ message throwable]
-        (log-append (Date.) :debug message throwable))
+        (log-append (Date.) :debug message class throwable))
       (trace [_ message]
-        (log-append (Date.) :trace message))
+        (log-append (Date.) :trace message class))
       (trace [_ message throwable]
-        (log-append (Date.) :trace message throwable)))))
+        (log-append (Date.) :trace message class throwable)))))
 
 (defn create-server
   "starts an embedded HornetQ server"
@@ -196,11 +196,16 @@
        (send-to [mb name msg]
          (try
            (create-queue mb name)
-           (catch Exception _))
+           (catch Exception e
+             (log-append (Date.) :trace "failed to create-queue" *ns* e)))
          (let [m (doto (.createMessage session false)
                    (-> .getBodyBuffer (.writeBytes (serialize msg))))]
            (.send producer name m)))
        (receive-from [mb name fun]
+         (try
+           (create-queue mb name)
+           (catch Exception e
+             (log-append (Date.) :trace "failed to create-queue" *ns* e)))
          (.start session)
          (swap! consumer-cache
                 (fn [cache]
