@@ -90,7 +90,9 @@
                        (.setPagingDirectory paging-dir)
                        (.setPersistenceEnabled false)
                        (.setSecurityEnabled true)
-                       (.setSharedStore false)))
+                       (.setSharedStore false)
+                       (.setClusterUser username)
+                       (.setClusterPassword password)))
                     (.setSecurityManager (security-manager username password))
                     (.start))]
        (reify
