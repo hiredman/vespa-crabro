@@ -113,61 +113,60 @@
                                                            (Base64/decodeBase64 (slurp cookie))))
                                                         opts)
         cookie-string (Base64/encodeBase64String (serialize opts))
-        ;; fiddle with the classloader to get the logging class to load
+        tmp-dir (System/getProperty "java.io.tmpdir")
+        config (ConfigurationImpl.)
+        journal-dir (.getAbsolutePath
+                     (file tmp-dir
+                           username
+                           (.getJournalDirectory config)))
+        bindings-dir (.getAbsolutePath
+                      (file tmp-dir
+                            username
+                            (.getBindingsDirectory config)))
+        large-messages-dir (.getAbsolutePath
+                            (file tmp-dir
+                                  username
+                                  (.getLargeMessagesDirectory config)))
+        paging-dir (.getAbsolutePath
+                    (file tmp-dir
+                          username
+                          (.getPagingDirectory config)))
+        acceptor-configs (doto (.getAcceptorConfigurations config)
+                           (.add (-> NettyAcceptorFactory .getName
+                                     (TransportConfiguration.
+                                      {"port" port
+                                       "host" host}))))
+        server (doto (EmbeddedHornetQ.)
+                 (.setConfiguration
+                  (doto config
+                    (.setJournalDirectory journal-dir)
+                    (.setBindingsDirectory bindings-dir)
+                    (.setLargeMessagesDirectory large-messages-dir)
+                    (.setPagingDirectory paging-dir)
+                    (.setPersistenceEnabled false)
+                    (.setSecurityEnabled true)
+                    (.setSharedStore false)
+                    (.setClusterUser username)
+                    (.setClusterPassword password)
+                    (.setLogDelegateFactoryClassName "vespa.crabro.LDF")))
+                 (.setSecurityManager (security-manager username password)))
         cxt-loader (.getContextClassLoader (Thread/currentThread))]
-    (spit cookie cookie-string)
+    (.setContextClassLoader (Thread/currentThread) @clojure.lang.Compiler/LOADER)
     (try
-      (.setContextClassLoader (Thread/currentThread) @clojure.lang.Compiler/LOADER)
-      (let [tmp-dir (System/getProperty "java.io.tmpdir")
-            config (ConfigurationImpl.)
-            journal-dir (.getAbsolutePath
-                         (file tmp-dir
-                               username
-                               (.getJournalDirectory config)))
-            bindings-dir (.getAbsolutePath
-                          (file tmp-dir
-                                username
-                                (.getBindingsDirectory config)))
-            large-messages-dir (.getAbsolutePath
-                                (file tmp-dir
-                                      username
-                                      (.getLargeMessagesDirectory config)))
-            paging-dir (.getAbsolutePath
-                        (file tmp-dir
-                              username
-                              (.getPagingDirectory config)))
-            acceptor-configs (doto (.getAcceptorConfigurations config)
-                               (.add (-> NettyAcceptorFactory .getName
-                                         (TransportConfiguration.
-                                          {"port" port
-                                           "host" host}))))
-            server (doto (EmbeddedHornetQ.)
-                     (.setConfiguration
-                      (doto config
-                        (.setJournalDirectory journal-dir)
-                        (.setBindingsDirectory bindings-dir)
-                        (.setLargeMessagesDirectory large-messages-dir)
-                        (.setPagingDirectory paging-dir)
-                        (.setPersistenceEnabled false)
-                        (.setSecurityEnabled true)
-                        (.setSharedStore false)
-                        (.setClusterUser username)
-                        (.setClusterPassword password)
-                        (.setLogDelegateFactoryClassName "vespa.crabro.LDF")))
-                     (.setSecurityManager (security-manager username password))
-                     (.start))]
-        (reify
-          Closeable
-          (close [_]
-            (.stop server)
-            (doseq [f [journal-dir bindings-dir large-messages-dir paging-dir]]
-              (.delete (file f)))
-            (.delete (.getParentFile (file journal-dir)))
-            (.delete (.getParentFile (.getParentFile (file journal-dir)))))
-          IHaveACookie
-          (cookie [_] cookie-string)))
+      (.start server)
       (finally
-       (.setContextClassLoader (Thread/currentThread) cxt-loader)))))
+       (.setContextClassLoader (Thread/currentThread) cxt-loader)))
+    (spit cookie cookie-string)
+    (reify
+      Closeable
+      (close [_]
+        (.stop server)
+        (doseq [f [journal-dir bindings-dir large-messages-dir paging-dir]]
+          (.delete (file f)))
+        (.delete (.getParentFile (file journal-dir)))
+        (.delete (.getParentFile (.getParentFile (file journal-dir)))))
+      IHaveACookie
+      (cookie [_] cookie-string))))
 
 (defn create-session-factory [host port]
   (let [loc (doto (HornetQClient/createServerLocatorWithoutHA
