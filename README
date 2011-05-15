@@ -26,7 +26,7 @@ the "cookie" is a base64 encoded serialized clojure map of connection parameters
 
 ## Todo
 
-* Simple Sever Entry Point
+* Simple Server Entry Point
   - write cookie to user.home/.vespa-cookie
   - reuse existing cookie in that location
   - support some kind of -D to overide
@@ -35,6 +35,7 @@ the "cookie" is a base64 encoded serialized clojure map of connection parameters
 * Decompose and Expose
   - give access to hornetq internals
   - make easy ramp up from vespa-crabro to using hornetq api directly
+* Split up crabro.clj in to functional units in their own namespaces
 
 ## License
 
