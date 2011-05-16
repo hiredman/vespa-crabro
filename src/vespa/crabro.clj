@@ -189,8 +189,8 @@
          (swap! consumer-cache
                 (fn [cache]
                   (if (contains? cache name)
-                     cache
-                     (assoc cache name (.createConsumer session name)))))
+                    cache
+                    (assoc cache name (.createConsumer session name)))))
          (let [c (get @consumer-cache name)
                m (.receive c)
                bb (.getBodyBuffer m)
