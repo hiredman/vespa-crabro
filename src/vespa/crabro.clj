@@ -1,7 +1,8 @@
 (ns vespa.crabro
-  (:use [clojure.java.io :only [file]])
-  (:import (clojure.lang PersistentQueue)
-           (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
+  (:use [clojure.java.io :only [file]]
+        [vespa.logging :only [log-append log-delegate-factory log-delegate-factory-classname]])
+  (:require [vespa.logging])
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
                     ObjectInputStream ObjectOutputStream)
            (java.net InetAddress)
            (java.util Date UUID)
@@ -9,10 +10,10 @@
            (org.hornetq.api.core TransportConfiguration)
            (org.hornetq.api.core.client HornetQClient)
            (org.hornetq.core.config.impl ConfigurationImpl)
+           (org.hornetq.core.logging Logger)
            (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory NettyConnectorFactory)
            (org.hornetq.core.server HornetQComponent)
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
-           (org.hornetq.spi.core.logging LogDelegate LogDelegateFactory)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
 
 (defn- serialize [object]
@@ -51,53 +52,6 @@
     (start [sm])
     (stop [sm])
     (isStarted [sm] true)))
-
-(def ^{:doc
-       "hornetq log messages are redirected to this queue, put a watch on the agent if
-  you want to do something else with them.
-  format is [date level message class-or-namespace & [throwable]]"}
-  log (agent PersistentQueue/EMPTY))
-
-(defn- trim-log [log]
-  (if (> (count log) 10)
-    (-> log pop pop)
-    log))
-
-(defn- log-append [& stuff]
-  (send-off log (fn [log] (conj (trim-log log) stuff))))
-
-(deftype LDF []
-  LogDelegateFactory
-  (createDelegate [_ class]
-    (reify
-      LogDelegate
-      (isInfoEnabled [_] true)
-      (isDebugEnabled [_] true)
-      (isTraceEnabled [_] false)
-      (fatal [_ message]
-        (log-append (Date.) :fatal message class))
-      (fatal [_ message throwable]
-        (log-append (Date.) :fatal message class throwable))
-      (error [_ message]
-        (log-append (Date.) :error message))
-      (error [_ message throwable]
-        (log-append (Date.) :error message class throwable))
-      (warn [_ message]
-        (log-append (Date.) :warn message))
-      (warn [_ message throwable]
-        (log-append (Date.) :warn message class throwable))
-      (info [_ message]
-        (log-append (Date.) :info message class))
-      (info [_ message throwable]
-        (log-append (Date.) :info message class throwable))
-      (debug [_ message]
-        (log-append (Date.) :debug message class))
-      (debug [_ message throwable]
-        (log-append (Date.) :debug message class throwable))
-      (trace [_ message]
-        (log-append (Date.) :trace message class))
-      (trace [_ message throwable]
-        (log-append (Date.) :trace message class throwable)))))
 
 (defmacro with-loader [& body]
   `(let [cxt-loader# (.getContextClassLoader (Thread/currentThread))]
@@ -163,7 +117,13 @@
                 :shared-store? false
                 :username username
                 :password password
-                :logging-delegate-classname "vespa.crabro.LDF")]
+                :logging-delegate-classname log-delegate-factory-classname)]
+    ;; hornetq starts logging before applying my logging settings
+    ;; this gets around it
+    (Logger/setDelegateFactory (log-delegate-factory))
+    ;; with-loader set's the compiler's classloader in place of the
+    ;; thread's current context loader so when the server starts it
+    ;; loads the logging class via the compiler's loader
     (with-loader
       (.start server))
     (spit cookie cookie-string)
@@ -229,8 +189,8 @@
          (swap! consumer-cache
                 (fn [cache]
                   (if (contains? cache name)
-                    cache
-                    (assoc cache name (.createConsumer session name)))))
+                     cache
+                     (assoc cache name (.createConsumer session name)))))
          (let [c (get @consumer-cache name)
                m (.receive c)
                bb (.getBodyBuffer m)
@@ -244,4 +204,5 @@
          (message-bus session session-factory))
        Closeable
        (close [mb]
-         (.stop session)))))
+         (.stop session)
+         (.close session)))))
