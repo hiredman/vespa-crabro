@@ -79,10 +79,13 @@
        (.setLogDelegateFactoryClassName logging-delegate-classname)))
     (.setSecurityManager (security-manager username password))))
 
+(defn add-netty-acceptor-factory [list opts]
+  (.add list (TransportConfiguration. (.getName NettyAcceptorFactory) opts)))
+
 (defn create-server
   "starts an embedded HornetQ server"
   [& {:as opts}]
-  (let [cookie (file (System/getProperty "user.home") ".vespa-cookie")
+  (let [cookie (file (System/getProperty "user.dir") ".vespa-cookie")
         {:keys [username password host port] :as opts} (merge
                                                         {:username (str (UUID/randomUUID))
                                                          :password (str (UUID/randomUUID))
@@ -102,10 +105,7 @@
         large-messages-dir (.getAbsolutePath (file tmp-dir largeMessagesDirectory))
         paging-dir (.getAbsolutePath (file tmp-dir pagingDirectory))
         acceptor-configs (doto (.getAcceptorConfigurations config)
-                           (.add (-> NettyAcceptorFactory .getName
-                                     (TransportConfiguration.
-                                      {"port" port
-                                       "host" host}))))
+                           (add-netty-acceptor-factory {"host" host "port" port}))
         server (configure-sever
                 :config config
                 :journal-dir journal-dir
@@ -155,7 +155,7 @@
 (defn message-bus
   ([]
      (message-bus
-      (slurp (file (System/getProperty "user.home") ".vespa-cookie"))))
+      (slurp (file (System/getProperty "user.dir") ".vespa-cookie"))))
   ([cookie-or-map]
      (if (map? cookie-or-map)
        (let [{:keys [host port username password]} cookie-or-map
