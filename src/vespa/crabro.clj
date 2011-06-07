@@ -33,6 +33,9 @@
 (defprotocol IHaveACookie
   (cookie [obj]))
 
+(defprotocol IHaveASession
+  (get-session [obj]))
+
 (defn- security-manager [username password]
   (reify
     HornetQSecurityManager
@@ -150,7 +153,38 @@
   (create-queue [mb name])
   (create-tmp-queue [mb name])
   (send-to [mb name msg])
-  (receive-from [mb name fun]))
+  (receive-from [mb name fun])
+  (get-consumer-cache [mb])
+  (get-producer [mb]))
+
+(defn send-to-fn [mb name msg]
+  (try
+    (create-queue mb name)
+    (catch Exception e
+      (log-append (Date.) :trace "failed to create-queue" *ns* e)))
+  (let [m (doto (.createMessage (get-session mb) false)
+            (-> .getBodyBuffer (.writeBytes (serialize msg))))]
+    (.send (get-producer mb) name m)))
+
+(defn receive-from-fn [mb name fun]
+  (try
+    (create-queue mb name)
+    (catch Exception e
+      (log-append (Date.) :trace "failed to create-queue" *ns* e)))
+  (.start (get-session mb))
+  (swap! (get-consumer-cache mb)
+         (fn [cache]
+           (if (contains? cache name)
+             cache
+             (assoc cache name (.createConsumer (get-session mb) name)))))
+  (let [c (get @(get-consumer-cache mb) name)
+        m (.receive c)
+        bb (.getBodyBuffer m)
+        buf (byte-array (.readableBytes bb))]
+    (.readBytes bb buf)
+    (let [result (fun (deserialize buf))]
+      (.acknowledge m)
+      result)))
 
 (defn message-bus
   ([]
@@ -173,32 +207,13 @@
        (create-tmp-queue [mb name]
          (.createTemporaryQueue session name name))
        (send-to [mb name msg]
-         (try
-           (create-queue mb name)
-           (catch Exception e
-             (log-append (Date.) :trace "failed to create-queue" *ns* e)))
-         (let [m (doto (.createMessage session false)
-                   (-> .getBodyBuffer (.writeBytes (serialize msg))))]
-           (.send producer name m)))
+         (send-to-fn mb name msg))
        (receive-from [mb name fun]
-         (try
-           (create-queue mb name)
-           (catch Exception e
-             (log-append (Date.) :trace "failed to create-queue" *ns* e)))
-         (.start session)
-         (swap! consumer-cache
-                (fn [cache]
-                  (if (contains? cache name)
-                    cache
-                    (assoc cache name (.createConsumer session name)))))
-         (let [c (get @consumer-cache name)
-               m (.receive c)
-               bb (.getBodyBuffer m)
-               buf (byte-array (.readableBytes bb))]
-           (.readBytes bb buf)
-           (let [result (fun (deserialize buf))]
-             (.acknowledge m)
-             result)))
+         (receive-from-fn mb name fun))
+       (get-consumer-cache [mb] consumer-cache)
+       (get-producer [mb] producer)
+       IHaveASession
+       (get-session [mb] session)
        Object
        (clone [mb]
          (message-bus session session-factory))
