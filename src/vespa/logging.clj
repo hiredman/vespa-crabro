@@ -34,8 +34,8 @@
         (when (> (count buf) size)
           (dotimes [i (- (count buf) size)]
             (.remove buf (int 0))))
-        (doseq [[k fn] @watches]
-          (apply fn k this old-state obj))))
+        (doseq [[k the-fn] @watches]
+          (the-fn k this old-state obj))))
     nil))
 
 (defn ring-buffer [n]
