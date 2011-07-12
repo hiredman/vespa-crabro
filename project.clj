@@ -7,4 +7,4 @@
                  [org.hornetq/hornetq-transports "2.1.0.r9031"]
                  [org.jboss.netty/netty "3.2.0.Final"]
                  [commons-codec "1.5"]]
-  :dev-dependencies [[swank-clojure "1.3.0"]])
+  :main vespa.server)
