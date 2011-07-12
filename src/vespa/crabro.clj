@@ -198,6 +198,32 @@
       (.acknowledge m)
       result)))
 
+(declare message-bus)
+
+(deftype AMessageBus [session session-factory producer consumer-cache cookie]
+  MessageBus
+  (create-queue [mb name]
+    (.createQueue session name name))
+  (create-tmp-queue [mb name]
+    (.createTemporaryQueue session name name))
+  (send-to [mb name msg]
+    (send-to-fn mb name msg))
+  (receive-from [mb name fun]
+    (receive-from-fn mb name fun))
+  (get-consumer-cache [mb] consumer-cache)
+  (get-producer [mb] producer)
+  IHaveASession
+  (get-session [mb] session)
+  Object
+  (clone [mb]
+    (message-bus session session-factory))
+  Closeable
+  (close [mb]
+    (.stop session)
+    (.close session))
+  IHaveACookie
+  (cookie [_] cookie))
+
 (defn message-bus
   ([]
      (message-bus
@@ -207,29 +233,11 @@
        (let [{:keys [host port username password]} cookie-or-map
              sf (create-session-factory host port)
              s (.createSession sf username password false true true false 1)]
-         (message-bus s sf))
+         (message-bus
+          s sf (Base64/encodeBase64String (serialize cookie-or-map))))
        (message-bus (deserialize (Base64/decodeBase64 cookie-or-map)))))
-  ([session session-factory]
-     (message-bus session session-factory (atom {}) (.createProducer session)))
-  ([session session-factory consumer-cache producer]
-     (reify
-       MessageBus
-       (create-queue [mb name]
-         (.createQueue session name name))
-       (create-tmp-queue [mb name]
-         (.createTemporaryQueue session name name))
-       (send-to [mb name msg]
-         (send-to-fn mb name msg))
-       (receive-from [mb name fun]
-         (receive-from-fn mb name fun))
-       (get-consumer-cache [mb] consumer-cache)
-       (get-producer [mb] producer)
-       IHaveASession
-       (get-session [mb] session)
-       Object
-       (clone [mb]
-         (message-bus session session-factory))
-       Closeable
-       (close [mb]
-         (.stop session)
-         (.close session)))))
+  ([session session-factory cookie]
+     (message-bus session session-factory (.createProducer session)
+                  (atom {}) cookie))
+  ([session session-factory producer consumer-cache cookie]
+     (AMessageBus. session session-factory producer consumer-cache cookie)))
