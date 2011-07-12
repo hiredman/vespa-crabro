@@ -113,14 +113,18 @@
         cookie-string (Base64/encodeBase64String (serialize opts))
         tmp-dir (file (System/getProperty "java.io.tmpdir") username)
         config (ConfigurationImpl.)
-        {:keys [bindingsDirectory journalDirectory largeMessagesDirectory pagingDirectory]}
-        (bean config)
+        {:keys [bindingsDirectory
+                journalDirectory
+                largeMessagesDirectory
+                pagingDirectory]} (bean config)
         journal-dir (.getAbsolutePath (file tmp-dir journalDirectory))
         bindings-dir (.getAbsolutePath (file tmp-dir bindingsDirectory))
-        large-messages-dir (.getAbsolutePath (file tmp-dir largeMessagesDirectory))
+        large-messages-dir (.getAbsolutePath
+                            (file tmp-dir largeMessagesDirectory))
         paging-dir (.getAbsolutePath (file tmp-dir pagingDirectory))
         acceptor-configs (doto (.getAcceptorConfigurations config)
-                           (add-netty-acceptor-factory {"host" host "port" port}))
+                           (add-netty-acceptor-factory
+                            {"host" host "port" port}))
         server (configure-sever
                 :config config
                 :journal-dir journal-dir
