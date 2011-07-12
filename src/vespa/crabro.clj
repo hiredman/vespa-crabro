@@ -70,9 +70,10 @@
        (finally
         (.setContextClassLoader (Thread/currentThread) cxt-loader#)))))
 
-(defn configure-sever [& {:keys [config journal-dir bindings-dir large-messages-dir
-                                 paging-dir persistence? security? shared-store?
-                                 username password logging-delegate-classname]}]
+(defn configure-sever [& {:keys [config journal-dir bindings-dir
+                                 large-messages-dir paging-dir persistence?
+                                 security? shared-store? username password
+                                 logging-delegate-classname]}]
   (doto (EmbeddedHornetQ.)
     (.setConfiguration
      (doto config
@@ -95,14 +96,19 @@
   "starts an embedded HornetQ server"
   [& {:as opts}]
   (let [cookie (file (System/getProperty "user.dir") ".vespa-cookie")
+        random-port (+ 2000 (rand-int 500))
+        random-username (str (UUID/randomUUID))
+        random-password (str (UUID/randomUUID))
+        defults {:username random-username
+                 :password random-password
+                 :host (hostname)
+                 :port random-port}
         {:keys [username password host port] :as opts} (merge
-                                                        {:username (str (UUID/randomUUID))
-                                                         :password (str (UUID/randomUUID))
-                                                         :host (hostname)
-                                                         :port (+ 2000 (rand-int 500))}
+                                                        defaults
                                                         (when (.exists cookie)
                                                           (deserialize
-                                                           (Base64/decodeBase64 (slurp cookie))))
+                                                           (Base64/decodeBase64
+                                                            (slurp cookie))))
                                                         opts)
         cookie-string (Base64/encodeBase64String (serialize opts))
         tmp-dir (file (System/getProperty "java.io.tmpdir") username)
