@@ -99,7 +99,7 @@
         random-port (+ 2000 (rand-int 500))
         random-username (str (UUID/randomUUID))
         random-password (str (UUID/randomUUID))
-        defults {:username random-username
+        defaults {:username random-username
                  :password random-password
                  :host (hostname)
                  :port random-port}
