@@ -56,9 +56,15 @@
     (stop [sm])
     (isStarted [sm] true)))
 
+(defn safe-compiler-loader []
+  (try
+    @clojure.lang.Compiler/LOADER
+    (catch Exception _
+      (.getContextClassLoader (Thread/currentThread)))))
+
 (defmacro with-loader [& body]
   `(let [cxt-loader# (.getContextClassLoader (Thread/currentThread))]
-     (.setContextClassLoader (Thread/currentThread) @clojure.lang.Compiler/LOADER)
+     (.setContextClassLoader (Thread/currentThread) (safe-compiler-loader))
      (try
        ~@body
        (finally
