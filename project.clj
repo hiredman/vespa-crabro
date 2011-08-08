@@ -1,4 +1,4 @@
-(defproject vespa-crabro "1.0.0-SNAPSHOT"
+(defproject vespa-crabro "1.0.0"
   :description "easy distribution for clojure"
   :repositories {"jboss" "https://repository.jboss.org/nexus/content/repositories/releases/"}
   :dependencies [[org.clojure/clojure "1.2.1"]
