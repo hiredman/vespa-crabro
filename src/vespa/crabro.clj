@@ -166,35 +166,56 @@
     (.createSessionFactory loc)))
 
 (defprotocol MessageBus
-  (create-queue [mb name])
-  (create-tmp-queue [mb name])
-  (send-to [mb name msg])
+  (create-queue-fn [mb name opts])
+  (create-tmp-queue-fn [mb name opts])
+  (send-to-fn [mb name msg opts])
   (receive-from [mb name fun])
   (get-consumer-cache [mb])
-  (get-producer [mb]))
+  (get-producer [mb])
+  (declare-broadcast [mb queue]))
 
-(defn send-to-fn [mb name msg]
+(defn create-queue [mb name & {:as opts}]
+  (create-queue-fn mb name opts))
+
+(defn create-tmp-queue [mb name & {:as opts}]
+  (create-tmp-queue-fn mb name opts))
+
+(defn send-to [mb name msg & {:as opts}]
+  (send-to-fn mb name msg opts))
+
+(defn send-to-fn-fn [mb name msg opts]
   (try
-    (create-queue mb name)
+    ;; would rather not do this, but if I don't queues need to be
+    ;; declared up front
+    ;; possibly split out 2 sets of fns for point-to-point and pubsub messaging
+    (when-not (get @(get-consumer-cache mb) name)
+      (create-tmp-queue-fn mb name opts))
     (catch Exception e
       (log-append (Date.) :trace "failed to create-queue" *ns* e)))
-  (let [m (doto (.createMessage (get-session mb) false)
+  (let [m (doto (.createMessage (get-session mb)
+                                ClientMessage/DEFAULT_TYPE
+                                false
+                                (:expiration opts 0)
+                                (:timestamp opts 0)
+                                0)
             (-> .getBodyBuffer (.writeBytes (serialize msg))))]
     (.send (get-producer mb) name m)))
 
 (defn receive-from-fn [mb name fun]
-  (try
-    (create-queue mb name)
-    (catch Exception e
-      (log-append (Date.) :trace "failed to create-queue" *ns* e)))
+  (log-append (Date.) :trace (str @(get-consumer-cache mb)) *ns* nil)
   (.start (get-session mb))
   (swap! (get-consumer-cache mb)
          (fn [cache]
            (if (contains? cache name)
              cache
-             (assoc cache name (.createConsumer (get-session mb) name)))))
+             (do
+               (try
+                 (create-queue mb name)
+                 (catch Exception e
+                   (log-append (Date.) :trace "failed to create-queue" *ns* e)))
+               (assoc cache name (.createConsumer (get-session mb) name))))))
   (let [c (get @(get-consumer-cache mb) name)
-        m (.receive c)
+        m (.receive c 1000)
         bb (.getBodyBuffer m)
         buf (byte-array (.readableBytes bb))]
     (.readBytes bb buf)
@@ -206,16 +227,32 @@
 
 (deftype AMessageBus [session session-factory producer consumer-cache cookie]
   MessageBus
-  (create-queue [mb name]
+  (create-queue-fn [mb name opts]
     (.createQueue session name name))
-  (create-tmp-queue [mb name]
+  (create-tmp-queue-fn [mb name opts]
     (.createTemporaryQueue session name name))
-  (send-to [mb name msg]
-    (send-to-fn mb name msg))
+  (send-to-fn [mb name msg opts]
+    (send-to-fn-fn mb name msg opts))
   (receive-from [mb name fun]
     (receive-from-fn mb name fun))
   (get-consumer-cache [mb] consumer-cache)
   (get-producer [mb] producer)
+  ;; needs a better name
+  (declare-broadcast [mb queue]
+    (let [queue-name (str queue "." (UUID/randomUUID))
+          address queue]
+      (try
+        (.createTemporaryQueue session address queue-name)
+        (catch Exception e
+          (log-append (Date.) :trace "failed to create-queue" *ns* e)))
+      (.start (get-session mb))
+      (swap! (get-consumer-cache mb)
+             (fn [cache]
+               (if (contains? cache address)
+                 cache
+                 (assoc cache
+                   address (.createConsumer (get-session mb) queue-name))))))
+    nil)
   IHaveASession
   (get-session [mb] session)
   Object

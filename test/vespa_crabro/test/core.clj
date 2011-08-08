@@ -14,4 +14,16 @@
                     (fn [c]
                       (with-open [mb2 (message-bus c)]
                         (send-to mb2 "foo" {:x 2}))))
-      (receive-from mb "foo" (fn [x] (is (= x {:x 2})))))))
+      (receive-from mb "foo" (fn [x] (is (= x {:x 2})))))
+    (testing "broadcasting"
+      (with-open [mb1 (message-bus)
+                  mb2 (message-bus)]
+        (declare-broadcast mb1 "broadcast")
+        (declare-broadcast mb2 "broadcast")
+        (send-to mb1 "broadcast" {:x 3})
+        (receive-from mb1 "broadcast"
+                      (fn [x]
+                        (is (= x {:x 3}))))
+        (receive-from mb2 "broadcast"
+                      (fn [x]
+                        (is (= x {:x 3}))))))))
