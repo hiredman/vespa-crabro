@@ -7,11 +7,13 @@
            (java.net InetAddress)
            (java.util Date UUID)
            (org.apache.commons.codec.binary Base64)
-           (org.hornetq.api.core TransportConfiguration)
+           (org.hornetq.api.core TransportConfiguration SimpleString)
            (org.hornetq.api.core.client HornetQClient)
            (org.hornetq.core.config.impl ConfigurationImpl)
            (org.hornetq.core.logging Logger)
-           (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory NettyConnectorFactory)
+           (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory
+                                                 NettyConnectorFactory)
+           (org.hornetq.api.core.client ClientMessage)
            (org.hornetq.core.server HornetQComponent)
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
@@ -96,6 +98,7 @@
   "starts an embedded HornetQ server"
   [& {:as opts}]
   (let [cookie (file (System/getProperty "user.dir") ".vespa-cookie")
+        ;; TODO: pull defaults out into function
         random-port (+ 2000 (rand-int 500))
         random-username (str (UUID/randomUUID))
         random-password (str (UUID/randomUUID))
@@ -110,7 +113,8 @@
                                                            (Base64/decodeBase64
                                                             (slurp cookie))))
                                                         opts)
-        cookie-string (Base64/encodeBase64String (serialize opts))
+        cookie-string (Base64/encodeBase64String
+                       (serialize (dissoc opts :configurator)))
         tmp-dir (file (System/getProperty "java.io.tmpdir") username)
         config (ConfigurationImpl.)
         {:keys [bindingsDirectory
@@ -144,6 +148,8 @@
     ;; thread's current context loader so when the server starts it
     ;; loads the logging class via the compiler's loader
     (with-loader
+      (when-let [configurator (:configurator opts)]
+        (configurator server))
       (.start server))
     (spit cookie cookie-string)
     (reify
