@@ -1,5 +1,6 @@
 (ns vespa-crabro.test.core
   (:use [vespa.crabro]
+        [vespa.protocols]
         [clojure.test]))
 
 (deftest test-vespa-crabro

@@ -1,6 +1,7 @@
 (ns vespa.crabro
   (:use [clojure.java.io :only [file]]
-        [vespa.logging :only [log-append log-delegate-factory log-delegate-factory-classname]])
+        [vespa.logging :only [log-append log-delegate-factory log-delegate-factory-classname]]
+        [vespa.protocols])
   (:require [vespa.logging])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
                     ObjectInputStream ObjectOutputStream)
@@ -31,12 +32,6 @@
 
 (defn- hostname []
   (.getHostName (InetAddress/getLocalHost)))
-
-(defprotocol IHaveACookie
-  (cookie [obj]))
-
-(defprotocol IHaveASession
-  (get-session [obj]))
 
 (defn- security-manager [username password]
   (reify
@@ -170,15 +165,6 @@
                       {"host" host "port" port})]))
               (.setReconnectAttempts -1))]
     (.createSessionFactory loc)))
-
-(defprotocol MessageBus
-  (create-queue-fn [mb name opts])
-  (create-tmp-queue-fn [mb name opts])
-  (send-to-fn [mb name msg opts])
-  (receive-from [mb name fun])
-  (get-consumer-cache [mb])
-  (get-producer [mb])
-  (declare-broadcast [mb queue]))
 
 (defn create-queue [mb name & {:as opts}]
   (create-queue-fn mb name opts))
