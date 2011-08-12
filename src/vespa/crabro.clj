@@ -14,6 +14,8 @@
            (org.hornetq.core.logging Logger)
            (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory
                                                  NettyConnectorFactory)
+           (org.hornetq.core.remoting.impl.invm InVMAcceptorFactory
+                                                InVMConnectorFactory)
            (org.hornetq.api.core.client ClientMessage)
            (org.hornetq.core.server HornetQComponent)
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
@@ -70,8 +72,9 @@
 (defn configure-sever [& {:keys [config journal-dir bindings-dir
                                  large-messages-dir paging-dir persistence?
                                  security? shared-store? username password
-                                 logging-delegate-classname]}]
-  (doto (EmbeddedHornetQ.)
+                                 logging-delegate-classname
+                                 server]}]
+  (doto (or server (EmbeddedHornetQ.))
     (.setConfiguration
      (doto config
        (.setJournalDirectory journal-dir)
@@ -88,6 +91,11 @@
 
 (defn add-netty-acceptor-factory [list opts]
   (.add list (TransportConfiguration. (.getName NettyAcceptorFactory) opts)))
+
+(defn add-vm-acceptor-factory [list opts]
+  (.add list (TransportConfiguration. (.getName InVMAcceptorFactory) opts)))
+
+(def ^{:dynamic true} *hornetq-server* nil)
 
 (defn create-server
   "starts an embedded HornetQ server"
@@ -123,8 +131,10 @@
         paging-dir (.getAbsolutePath (file tmp-dir pagingDirectory))
         acceptor-configs (doto (.getAcceptorConfigurations config)
                            (add-netty-acceptor-factory
-                            {"host" host "port" port}))
+                            {"host" host "port" port})
+                           (add-vm-acceptor-factory {"server-id" "0"}))
         server (configure-sever
+                :server *hornetq-server*
                 :config config
                 :journal-dir journal-dir
                 :bindings-dir bindings-dir
@@ -155,6 +165,15 @@
           (.delete f)))
       IHaveACookie
       (cookie [_] cookie-string))))
+
+(defn in-vm-locator [opts]
+  (doto (HornetQClient/createServerLocatorWithoutHA
+         (into-array
+          TransportConfiguration
+          [(TransportConfiguration.
+            (.getName InVMConnectorFactory)
+            opts)]))
+    (.setReconnectAttempts -1)))
 
 (defn create-session-factory [host port]
   (let [loc (doto (HornetQClient/createServerLocatorWithoutHA
@@ -206,14 +225,15 @@
                  (catch Exception e
                    (log-append (Date.) :trace "failed to create-queue" *ns* e)))
                (assoc cache name (.createConsumer (get-session mb) name))))))
-  (let [c (get @(get-consumer-cache mb) name)
-        m (.receive c 1000)
-        bb (.getBodyBuffer m)
-        buf (byte-array (.readableBytes bb))]
-    (.readBytes bb buf)
-    (let [result (fun (deserialize buf))]
-      (.acknowledge m)
-      result)))
+  (let [c (get @(get-consumer-cache mb) name)]
+    (if-let [m (.receive c)]
+      (let [bb (.getBodyBuffer m)
+            buf (byte-array (.readableBytes bb))]
+        (.readBytes bb buf)
+        (let [result (fun (deserialize buf))]
+          (.acknowledge m)
+          result))
+      ::timeout)))
 
 (declare message-bus)
 
@@ -244,12 +264,12 @@
                  cache
                  (assoc cache
                    address (.createConsumer (get-session mb) queue-name))))))
-    nil)
+    nil) 
   IHaveASession
   (get-session [mb] session)
   Object
   (clone [mb]
-    (message-bus session session-factory))
+    (message-bus (deserialize (Base64/decodeBase64 cookie)) session-factory))
   Closeable
   (close [mb]
     (.stop session)
@@ -257,20 +277,25 @@
   IHaveACookie
   (cookie [_] cookie))
 
+(defn read-coookie []
+  (deserialize
+   (Base64/decodeBase64 (slurp (file (System/getProperty "user.dir") ".vespa-cookie")))))
+
 (defn message-bus
   ([]
      (message-bus
       (slurp (file (System/getProperty "user.dir") ".vespa-cookie"))))
   ([cookie-or-map]
      (if (map? cookie-or-map)
-       (let [{:keys [host port username password]} cookie-or-map
-             sf (create-session-factory host port)
-             s (.createSession sf username password false true true false 1)]
-         (message-bus
-          s sf (Base64/encodeBase64String (serialize cookie-or-map))))
+       (let [{:keys [host port]} cookie-or-map
+             sf (create-session-factory host port)]
+         (message-bus cookie-or-map sf))
        (message-bus (deserialize (Base64/decodeBase64 cookie-or-map)))))
+  ([m session-factory]
+     (let [{:keys [host port username password]} m
+           s (.createSession session-factory username password false true true false 1)]
+       (message-bus s session-factory (Base64/encodeBase64String (serialize m)))))
   ([session session-factory cookie]
-     (message-bus session session-factory (.createProducer session)
-                  (atom {}) cookie))
+     (message-bus session session-factory (.createProducer session) (atom {}) cookie))
   ([session session-factory producer consumer-cache cookie]
      (AMessageBus. session session-factory producer consumer-cache cookie)))
