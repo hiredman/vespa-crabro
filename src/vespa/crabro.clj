@@ -1,7 +1,8 @@
 (ns vespa.crabro
   (:use [clojure.java.io :only [file]]
         [vespa.logging :only [log-append log-delegate-factory log-delegate-factory-classname]]
-        [vespa.protocols])
+        [vespa.protocols]
+        [vespa.rest :only [rest-server]])
   (:require [vespa.logging])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
                     ObjectInputStream ObjectOutputStream)
@@ -157,23 +158,16 @@
         (configurator server))
       (.start server))
     (spit cookie cookie-string)
-    (reify
-      Closeable
-      (close [_]
-        (.stop server)
-        (doseq [f (reverse (file-seq tmp-dir))]
-          (.delete f)))
-      IHaveACookie
-      (cookie [_] cookie-string))))
-
-(defn in-vm-locator [opts]
-  (doto (HornetQClient/createServerLocatorWithoutHA
-         (into-array
-          TransportConfiguration
-          [(TransportConfiguration.
-            (.getName InVMConnectorFactory)
-            opts)]))
-    (.setReconnectAttempts -1)))
+    (let [rs (rest-server server username password)]
+      (reify
+        Closeable
+        (close [_]
+          (.stop server)
+          (.close rs)
+          (doseq [f (reverse (file-seq tmp-dir))]
+            (.delete f)))
+        IHaveACookie
+        (cookie [_] cookie-string)))))
 
 (defn create-session-factory [host port]
   (let [loc (doto (HornetQClient/createServerLocatorWithoutHA

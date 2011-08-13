@@ -3,7 +3,7 @@
         [vespa.protocols]
         [clojure.test]))
 
-(add-watch vespa.logging/log :stdout (fn [k r os obj] (println (map str obj))))
+;;(add-watch vespa.logging/log :stdout (fn [k r os obj] (println (map str obj))))
 
 (deftest test-vespa-crabro
   (with-open [server (create-server)
