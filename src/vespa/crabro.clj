@@ -1,6 +1,7 @@
 (ns vespa.crabro
   (:use [clojure.java.io :only [file]]
-        [vespa.logging :only [log-append log-delegate-factory log-delegate-factory-classname]]
+        [vespa.logging :only [log-append log-delegate-factory
+                              log-delegate-factory-classname]]
         [vespa.protocols]
         [vespa.rest :only [rest-server]])
   (:require [vespa.logging])

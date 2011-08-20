@@ -3,7 +3,7 @@
         [vespa.protocols]
         [clojure.test]))
 
-;;(add-watch vespa.logging/log :stdout (fn [k r os obj] (println (map str obj))))
+;; (add-watch vespa.logging/log :stdout (fn [k r os obj] (println (map str obj))))
 
 (deftest test-vespa-crabro
   (with-open [server (create-server)
@@ -33,4 +33,11 @@
     (testing "cloning"
       (with-open [mb2 (.clone mb)]
         (send-to mb2 "foo" {:x 1})
-        (is (nil? (receive-from mb "foo" (fn [x] (is (= x {:x 1})) nil))))))))
+        (is (nil? (receive-from mb "foo" (fn [x] (is (= x {:x 1})) nil))))))
+    (testing "expiration"
+      (send-to mb "foo" {:x 5} :expiration 1000)
+      (send-to mb "foo" {:x 6})
+      (Thread/sleep 2000)
+      (receive-from mb "foo"
+                    (fn [x]
+                      (is (= x {:x 6})))))))
