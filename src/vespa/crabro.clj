@@ -200,8 +200,8 @@
 (defn create-tmp-queue [mb name & {:as opts}]
   (create-tmp-queue-fn mb name opts))
 
-(defn send-to [mb name msg & {:as opts}]
-  (send-to-fn mb name msg opts))
+(declare send-to)
+
 
 (defn send-to-fn-fn [mb name msg opts]
   (try
@@ -311,3 +311,6 @@
      (message-bus session session-factory (.createProducer session) (atom {}) cookie))
   ([session session-factory producer consumer-cache cookie]
      (AMessageBus. session session-factory producer consumer-cache cookie)))
+
+(defn send-to [mb name msg & {:as opts}]
+  (send-to-fn mb name msg opts))
