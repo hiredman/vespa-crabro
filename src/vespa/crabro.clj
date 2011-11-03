@@ -290,7 +290,8 @@
 
 (defn read-coookie []
   (deserialize
-   (Base64/decodeBase64 (slurp (file (System/getProperty "user.dir") ".vespa-cookie")))))
+   (Base64/decodeBase64
+    (slurp (file (System/getProperty "user.dir") ".vespa-cookie")))))
 
 (defn message-bus
   ([]
