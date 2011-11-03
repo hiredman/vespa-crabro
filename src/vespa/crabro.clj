@@ -277,6 +277,8 @@
   IHaveASession
   (get-session [mb] session)
   Object
+  (finalize [mb]
+    (.close mb))
   (clone [mb]
     (message-bus (deserialize (Base64/decodeBase64 cookie)) session-factory))
   Closeable
