@@ -300,15 +300,18 @@
   ([cookie-or-map]
      (if (map? cookie-or-map)
        (let [{:keys [host port]} cookie-or-map
-             sf (create-session-factory host port)]
+             sf (create-session-factory host port (when *in-vm-only* :invm))]
          (message-bus cookie-or-map sf))
        (message-bus (deserialize (Base64/decodeBase64 cookie-or-map)))))
   ([m session-factory]
      (let [{:keys [host port username password]} m
-           s (.createSession session-factory username password false true true false 1)]
-       (message-bus s session-factory (Base64/encodeBase64String (serialize m)))))
+           s (.createSession
+              session-factory username password false true true false 1)]
+       (message-bus
+        s session-factory (Base64/encodeBase64String (serialize m)))))
   ([session session-factory cookie]
-     (message-bus session session-factory (.createProducer session) (atom {}) cookie))
+     (message-bus
+      session session-factory (.createProducer session) (atom {}) cookie))
   ([session session-factory producer consumer-cache cookie]
      (AMessageBus. session session-factory producer consumer-cache cookie)))
 
