@@ -23,6 +23,10 @@
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
 
+(def ^{:dynamic true} *in-vm-only* false)
+
+(def ^{:dynamic true} *rest-interface* false)
+
 (defn- serialize [object]
   (with-open [baos (ByteArrayOutputStream.)
               oos (ObjectOutputStream. baos)]
@@ -131,10 +135,13 @@
         large-messages-dir (.getAbsolutePath
                             (file tmp-dir largeMessagesDirectory))
         paging-dir (.getAbsolutePath (file tmp-dir pagingDirectory))
-        acceptor-configs (doto (.getAcceptorConfigurations config)
-                           (add-netty-acceptor-factory
-                            {"host" host "port" port})
-                           (add-vm-acceptor-factory {"server-id" "0"}))
+        acceptor-configs (if *in-vm-only*
+                           (doto (.getAcceptorConfigurations config)
+                             (add-vm-acceptor-factory {"server-id" port}))
+                           (doto (.getAcceptorConfigurations config)
+                             (add-netty-acceptor-factory
+                              {"host" host "port" port})
+                             (add-vm-acceptor-factory {"server-id" port})))
         server (configure-sever
                 :server *hornetq-server*
                 :config config
@@ -159,24 +166,31 @@
         (configurator server))
       (.start server))
     (spit cookie cookie-string)
-    (let [rs (rest-server server username password)]
+    (let [rs (when *rest-interface*
+               (rest-server server username password port))]
       (reify
         Closeable
         (close [_]
           (.stop server)
-          (.close rs)
+          (when *rest-interface*
+            (.close rs))
           (doseq [f (reverse (file-seq tmp-dir))]
             (.delete f)))
         IHaveACookie
         (cookie [_] cookie-string)))))
 
-(defn create-session-factory [host port]
+(defn create-session-factory [host port & opts]
   (let [loc (doto (HornetQClient/createServerLocatorWithoutHA
                    (into-array
                     TransportConfiguration
-                    [(TransportConfiguration.
-                      (.getName NettyConnectorFactory)
-                      {"host" host "port" port})]))
+                    (if ((set opts) :invm)
+                      [(TransportConfiguration.
+                        (.getName InVMConnectorFactory)
+                        {"server-id" port})]
+                      [(TransportConfiguration.
+                        (.getName NettyConnectorFactory)
+                        {"host" host "port" port})
+                       ])))
               (.setReconnectAttempts -1))]
     (.createSessionFactory loc)))
 

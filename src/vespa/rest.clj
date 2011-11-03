@@ -3,7 +3,8 @@
         [vespa.logging :only [log]]
         [vespa.remoting :only [in-vm-locator]])
   (:import (org.hornetq.rest.integration EmbeddedRestHornetQ)
-           (org.hornetq.rest.queue QueueDeployment DestinationSettings QueueServiceManager)
+           (org.hornetq.rest.queue QueueDeployment DestinationSettings
+                                   QueueServiceManager)
            (org.hornetq.rest MessageServiceManager MessageServiceConfiguration)
            (org.jboss.resteasy.plugins.server.tjws TJWSEmbeddedJaxrsServer)
            (org.hornetq.rest.util TimeoutTask
@@ -12,7 +13,7 @@
            (java.io Closeable)
            (org.hornetq.api.core.client ClientSessionFactory ClientSession)))
 
-(defn service-manager [username password]
+(defn service-manager [username password host]
   (let [config (MessageServiceConfiguration.)
         pool (Executors/newCachedThreadPool)
         tot (TimeoutTask. (.getTimeoutTaskInterval config))
@@ -20,7 +21,7 @@
                    (.setConsumerSessionTimeoutSeconds 60)
                    (.setDuplicatesAllowed (.isDupsOk config))
                    (.setDurableSend (.isDefaultDurableSend config)))
-        loc (in-vm-locator {"server-id" "0"})]
+        loc (in-vm-locator {"server-id" host})]
     (when (not= -1 (.getConsumerWindowSize config))
       (.setConsumerWindowSize loc (.getConsumerWindowSize config)))
     (.execute pool tot)
@@ -36,7 +37,8 @@
                                                           false
                                                           false
                                                           1))
-                         (^ClientSession createSession [_ ^boolean ac-sends ^boolean ac-acks]
+                         (^ClientSession createSession [_ ^boolean ac-sends
+                                                        ^boolean ac-acks]
                            ^ClientSession (.createSession session-factory
                                                           username
                                                           password
@@ -45,7 +47,8 @@
                                                           ac-acks
                                                           false
                                                           1))
-                         (^ClientSession createSession [_ ^boolean _ ^boolean _ ^boolean _]
+                         (^ClientSession createSession [_ ^boolean _ ^boolean _
+                                                        ^boolean _]
                            ^ClientSession (.createSession session-factory
                                                           username
                                                           password
@@ -63,18 +66,20 @@
                         (.setConsumerSessionFactory fake-factory)
                         (.setDefaultSettings defaults)
                         (.setPushStoreFile (.getQueuePushStoreDirectory config))
-                        (.setProducerPoolSize (.getProducerSessionPoolSize config))
+                        (.setProducerPoolSize
+                         (.getProducerSessionPoolSize config))
                         (.setLinkStrategy link-strart))})))
 
-(defn rest-server [hornetq username password]
+(defn rest-server [hornetq username password host]
   (let [tjws (doto (TJWSEmbeddedJaxrsServer.)
                (.setRootResourcePath "")
                (.setSecurityDomain nil)
                (.setPort 3000))
-        {:keys [queue-manager]} (service-manager username password)]
+        {:keys [queue-manager]} (service-manager username password host)]
     (.start tjws)
     (.start queue-manager)
-    (-> tjws .getDeployment .getRegistry (.addSingletonResource (.getDestination queue-manager)))
+    (-> tjws .getDeployment .getRegistry
+        (.addSingletonResource (.getDestination queue-manager)))
     (reify
       Closeable
       (close [_]
