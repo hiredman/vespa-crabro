@@ -112,9 +112,9 @@
         random-username (str (UUID/randomUUID))
         random-password (str (UUID/randomUUID))
         defaults {:username random-username
-                 :password random-password
-                 :host (hostname)
-                 :port random-port}
+                  :password random-password
+                  :host (hostname)
+                  :port random-port}
         {:keys [username password host port] :as opts} (merge
                                                         defaults
                                                         (when (.exists cookie)
@@ -273,7 +273,7 @@
                  cache
                  (assoc cache
                    address (.createConsumer (get-session mb) queue-name))))))
-    nil) 
+    nil)
   IHaveASession
   (get-session [mb] session)
   Object
