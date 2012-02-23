@@ -50,7 +50,7 @@
     (with-open [op (st/output-stream mb "foo" 1024)]
       (dotimes [i 26]
         (.write op (+ 65 i))))
-    (with-open [in (st/input-stream mb "foo")]
+    (with-open [in (st/input-stream mb "foo" 500)]
       (is (= "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
              (slurp in))))))
 
@@ -61,7 +61,7 @@
       (try
         (binding [*in* (java.io.PushbackReader.
                         (java.io.InputStreamReader.
-                         (st/input-stream mb "in")))
+                         (st/input-stream mb "in" 500)))
                   *out* (-> (st/output-stream mb "out" 1024)
                             java.io.OutputStreamWriter.
                             java.io.PrintWriter.)
@@ -71,14 +71,18 @@
           (clojure.main/repl
            :need-prompt (constantly false)
            :prompt (constantly false)
-           :print (fn [x]
-                    (send-to mb "result" x))))
+           :print #(send-to mb "result" %)))
         (catch Exception e
           (prn e))))
     (doto (st/output-stream mb "in" 1024)
       (.write (.getBytes "(+ 1 2)\n"))
       (.flush))
-    (receive-from mb "result" #(is (= 3 %)))))
+    (receive-from mb "result" #(is (= 3 %)))
+    (doto (st/output-stream mb "in" 1024)
+      (.write (.getBytes "(println 1)\n"))
+      (.flush))
+    (receive-from mb "result" #(is (= nil %)))
+    (receive-from mb "out" #(is (= "1\n" (String. %))))))
 
 (comment
 

@@ -41,7 +41,7 @@
            (alter state rest)
            elem))))))
 
-(defn input-stream [mb queue]
+(defn input-stream [mb queue wait]
   (SequenceInputStream.
    (seq->enumeration
     ((fn x []
@@ -49,7 +49,9 @@
         (loop [r (vp/receive-from mb queue identity)]
           (cond
            (= :vespa.crabro/timeout r)
-           (recur (vp/receive-from mb queue identity))
+           (do
+             (Thread/sleep wait)
+             (recur (vp/receive-from mb queue identity)))
            (not= :eof r)
            (cons (ByteArrayInputStream. r) (x))
            :else
