@@ -4,6 +4,14 @@ dirt simple distributed message queues for clojure, built on hornetq
 
 ## Usage
 
+from the jar:
+
+java -jar vespa-crabro-1.0.0-SNAPSHOT-standalone.jar :host $HOSTNAME :port $PORT
+
+will generate a .vespa-cookie you can use to connect to the server
+
+from the repl:
+
 vespa.crabro> (def server (create-server))
 #'vespa.crabro/server
 vespa.crabro> (cookie server)
