@@ -54,6 +54,32 @@
       (is (= "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
              (slurp in))))))
 
+(deftest t-repl
+  (with-open [server (create-server)
+              mb (message-bus)]
+    (future
+      (try
+        (binding [*in* (java.io.PushbackReader.
+                        (java.io.InputStreamReader.
+                         (st/input-stream mb "in")))
+                  *out* (-> (st/output-stream mb "out" 1024)
+                            java.io.OutputStreamWriter.
+                            java.io.PrintWriter.)
+                  *err* (-> (st/output-stream mb "err" 1024)
+                            java.io.OutputStreamWriter.
+                            java.io.PrintWriter.)]
+          (clojure.main/repl
+           :need-prompt (constantly false)
+           :prompt (constantly false)
+           :print (fn [x]
+                    (send-to mb "result" x))))
+        (catch Exception e
+          (prn e))))
+    (doto (st/output-stream mb "in" 1024)
+      (.write (.getBytes "(+ 1 2)\n"))
+      (.flush))
+    (receive-from mb "result" #(is (= 3 %)))))
+
 (comment
 
   (do
