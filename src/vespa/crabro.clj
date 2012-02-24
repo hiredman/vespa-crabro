@@ -189,9 +189,9 @@
                         {"server-id" port})]
                       [(TransportConfiguration.
                         (.getName NettyConnectorFactory)
-                        {"host" host "port" port})
-                       ])))
-              (.setReconnectAttempts -1))]
+                        {"host" host "port" port})])))
+              (.setReconnectAttempts -1)
+              (.setMinLargeMessageSize 52428800))]
     (.createSessionFactory loc)))
 
 (defn create-queue [mb name & {:as opts}]
