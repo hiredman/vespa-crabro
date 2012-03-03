@@ -72,8 +72,7 @@
            :need-prompt (constantly false)
            :prompt (constantly false)
            :print #(send-to mb "result" %)))
-        (catch Exception e
-          (prn e))))
+        (catch Exception _)))
     (doto (st/output-stream mb "in" 1024)
       (.write (.getBytes "(+ 1 2)\n"))
       (.flush))

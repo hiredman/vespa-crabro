@@ -33,7 +33,7 @@
         (let [old-state (when-not (empty? watches)
                           @this)]
           (.add buf obj)
-          (when (> (count buf) size)
+          (when (> (long (count buf)) size)
             (dotimes [i (- (count buf) size)]
               (.remove buf (int 0))))
           (doseq [[k the-fn] watches]
