@@ -2,7 +2,7 @@
   :description "easy distribution for clojure"
   :repositories {"jboss4" "http://repository.jboss.org/nexus/content/groups/public-jboss/"
                  "hornetq" "http://hornetq.s3.amazonaws.com/"}
-  :dependencies [[org.clojure/clojure "1.4.0-master-SNAPSHOT"]
+  :dependencies [[org.clojure/clojure "1.5.0-master-SNAPSHOT"]
                  [org.hornetq/hornetq-core "2.3.0-SNAPSHOT"]
                  [org.hornetq/hornetq-core-client "2.3.0-SNAPSHOT"]
                  [org.hornetq/hornetq-transports "2.1.0.r9031"]
