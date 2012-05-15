@@ -27,6 +27,9 @@
 
 (def ^{:dynamic true} *rest-interface* false)
 
+(defn read-coookie []
+  (read-string (slurp (file (System/getProperty "user.dir") ".vespa-cookie"))))
+
 (defn- serialize [object]
   (with-open [baos (ByteArrayOutputStream.)
               oos (ObjectOutputStream. baos)]
@@ -118,12 +121,9 @@
         {:keys [username password host port] :as opts} (merge
                                                         defaults
                                                         (when (.exists cookie)
-                                                          (deserialize
-                                                           (Base64/decodeBase64
-                                                            (slurp cookie))))
+                                                          (read-coookie))
                                                         opts)
-        cookie-string (Base64/encodeBase64String
-                       (serialize (dissoc opts :configurator)))
+        cookie-string (pr-str (dissoc opts :configurator))
         tmp-dir (file (System/getProperty "java.io.tmpdir") username)
         config (ConfigurationImpl.)
         {:keys [bindingsDirectory
@@ -279,7 +279,7 @@
   (finalize [mb]
     (.close mb))
   (clone [mb]
-    (message-bus (deserialize (Base64/decodeBase64 cookie)) session-factory))
+    (message-bus cookie session-factory))
   Closeable
   (close [mb]
     (.stop session)
@@ -287,27 +287,20 @@
   IHaveACookie
   (cookie [_] cookie))
 
-(defn read-coookie []
-  (deserialize
-   (Base64/decodeBase64
-    (slurp (file (System/getProperty "user.dir") ".vespa-cookie")))))
-
 (defn message-bus
   ([]
-     (message-bus
-      (slurp (file (System/getProperty "user.dir") ".vespa-cookie"))))
+     (message-bus (read-coookie)))
   ([cookie-or-map]
      (if (map? cookie-or-map)
        (let [{:keys [host port]} cookie-or-map
              sf (create-session-factory host port (when *in-vm-only* :invm))]
          (message-bus cookie-or-map sf))
-       (message-bus (deserialize (Base64/decodeBase64 cookie-or-map)))))
+       (message-bus (read-string cookie-or-map))))
   ([m session-factory]
      (let [{:keys [host port username password]} m
            s (.createSession
               session-factory username password false true true false 1)]
-       (message-bus
-        s session-factory (Base64/encodeBase64String (serialize m)))))
+       (message-bus s session-factory m)))
   ([session session-factory cookie]
      (message-bus
       session session-factory (.createProducer session) (atom {}) cookie))
