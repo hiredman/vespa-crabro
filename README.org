@@ -30,12 +30,12 @@ java -jar vespa-crabro-0.2.0-standalone.jar :host $HOSTNAME :port $PORT
     options to configure the port and host, etc.
 
 * Todo
-** Decompose and Expose
-   - give access to hornetq internals
-   - make easy ramp up from vespa-crabro to using hornetq api directly
-** Split up crabro.clj in to functional units in their own namespaces
-** Stomp it up
-   - https://github.com/jmesnil/hornetq-stomp/blob/master/src/org/hornetq/stomp/HornetQStompServer.java
+  - Decompose and Expose
+    - give access to hornetq internals
+    - make easy ramp up from vespa-crabro to using hornetq api directly
+  - Split up crabro.clj in to functional units in their own namespaces
+  - Stomp it up
+    - https://github.com/jmesnil/hornetq-stomp/blob/master/src/org/hornetq/stomp/HornetQStompServer.java
 
 * License
 
