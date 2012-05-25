@@ -61,7 +61,14 @@
           (send-to mb "q" ::boom)
           (is (= @r :baz))
           (Thread/sleep 100)
-          (is (thrown?  Exception (throw @state-tracker))))))))
+          (is (thrown?  Exception (throw @state-tracker)))))
+      (with-open [r (react-to mb "b"
+                              :action (fn [mb r state msg] msg))]
+        (react! r)
+        (is (= @r nil))
+        (send-to mb "b" :hello)
+        (Thread/sleep 100)
+        (is (= @r :hello))))))
 
 (deftest t-expiration
   (binding [*in-vm-only* true]
