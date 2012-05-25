@@ -4,9 +4,11 @@ dirt simple distributed message queues for clojure, built on hornetq
 
 ## Usage
 
+the client can add [vespa-crabro "0.2.0"] to your project.clj
+
 from the jar:
 
-java -jar vespa-crabro-1.0.0-SNAPSHOT-standalone.jar :host $HOSTNAME :port $PORT
+java -jar vespa-crabro-0.2.0-standalone.jar :host $HOSTNAME :port $PORT
 
 will generate a .vespa-cookie you can use to connect to the server
 
@@ -15,7 +17,7 @@ from the repl:
 vespa.crabro> (def server (create-server))
 #'vespa.crabro/server
 vespa.crabro> (cookie server)
-"rO0ABXNyAB9jbG9qdXJlLmxhbmcuUGVyc2lzdGVudEFycmF5TWFwvB68cxnfZYYCAAJMAAVfbWV0YXQAHUxjbG9qdXJlL2xhbmcvSVBlcnNpc3RlbnRNYXA7WwAFYXJyYXl0ABNbTGphdmEvbGFuZy9PYmplY3Q7eHIAG2Nsb2p1cmUubGFuZy5BUGVyc2lzdGVudE1hcG3uhcj06KpTAgABSQAFX2hhc2h4cP////9wdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAACHNyABRjbG9qdXJlLmxhbmcuS2V5d29yZMZ8iiIwj2BKAgACSQAEaGFzaEwAA3N5bXQAFUxjbG9qdXJlL2xhbmcvU3ltYm9sO3hw8sUTcXNyABNjbG9qdXJlLmxhbmcuU3ltYm9sEcCUKbD6dfICAARJAARoYXNoTAAFX21ldGFxAH4AAUwABG5hbWV0ABJMamF2YS9sYW5nL1N0cmluZztMAAJuc3EAfgALeHBUjZm4cHQACHVzZXJuYW1lcHQAJDI3MDNkYzMzLTBlYTUtNGNmZC1iZjg2LThkMmMyZWY2NGYxZXNxAH4ABzh4rz1zcQB+AAqaQTWEcHQACHBhc3N3b3JkcHQAJGU3YmU2YzFkLTFjOWUtNDlkYi05ODZkLTAxNmFhYzE5NmUzZnNxAH4AB0jpTkRzcQB+AAqqsdSLcHQABGhvc3RwdAAMdHVyamFuLmxvY2Fsc3EAfgAHSZXSUXNxAH4ACqteWJhwdAAEcG9ydHBzcgARamF2YS5sYW5nLkludGVnZXIS4qCk94GHOAIAAUkABXZhbHVleHIAEGphdmEubGFuZy5OdW1iZXKGrJUdC5TgiwIAAHhwAAAJoA=="
+...
 vespa.crabro> (def mb (message-bus))
 #'vespa.crabro/mb
 vespa.crabro> (send-to mb "foo" {:a 1 :b 2})
@@ -25,7 +27,7 @@ vespa.crabro> (receive-from mb "foo" println)
 nil
 vespa.crabro> 
 
-the "cookie" is a base64 encoded serialized clojure map of connection parameters.
+the "cookie" is a clojure map of connection parameters.
 create-server will write the cookied to user.home and message-bus will read the 
 cookie from there. create-server takes a number of options to configure the port
 and host, etc.
