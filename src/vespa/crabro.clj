@@ -340,8 +340,17 @@
   use set-action and set-error-handler on the reactor "
   ([mb queue]
      (react-to mb queue nil))
-  ([mb queue init]
-     (-react-to mb queue init)))
+  ([mb queue & args]
+     (let [options (if (and (> (count args) 1)
+                            (keyword? (first args)))
+                     (apply hash-map args)
+                     {:init (first args)})
+           r (-react-to mb queue (:init options))]
+       (when (:action options)
+         (set-action r (:action options)))
+       (when (:error-handler options)
+         (set-error-handler r (:error-handler options)))
+       r)))
 
 (deftype AMessageBus [session session-factory producer consumer-cache cookie]
   MessageBus
