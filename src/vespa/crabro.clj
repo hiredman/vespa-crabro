@@ -27,7 +27,8 @@
     "set the action to run on a message. action args are [messagebus this-reactor current-state new-state] actions may be run more than once for a message")
   (set-error-handler [reactor fun]
     "fun's args are [message-bus this-reactor state the-exception]")
-  (react! [reactor]))
+  (react! [reactor])
+  (get-queue [reactor]))
 
 (defprotocol MessageBus
   (create-queue-fn [mb name opts])
@@ -327,6 +328,8 @@
                                     (error-handler mb reactor @state e)
                                     (throw e)))))))
       nil))
+  (get-queue [reactor]
+    queue)
   Closeable
   (close [_]
     (.close mb)))
