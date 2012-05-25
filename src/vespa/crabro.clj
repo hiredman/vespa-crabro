@@ -281,6 +281,29 @@
 
 (declare message-bus)
 
+(defn message-handler [mb action error-handler state reactor]
+  (reify
+    MessageHandler
+    (onMessage [_ client-message]
+      (try
+        (let [msg (-> client-message
+                      message->bytes
+                      deserialize)]
+          (loop []
+            (let [old-state @state
+                  new-state (action mb
+                                    reactor
+                                    old-state
+                                    msg)]
+              (when-not (compare-and-set! state
+                                          old-state
+                                          new-state)
+                (recur))))
+          (.acknowledge client-message))
+        (catch Exception e
+          (if error-handler
+            (error-handler mb reactor @state client-message e)
+            (throw e)))))))
 
 (deftype AReactor [mb
                    state
@@ -304,29 +327,9 @@
       (.start (get-session mb))
       (set! running? true)
       (add-consumer mb queue)
-      (.setMessageHandler (get @(get-consumer-cache mb) queue)
-                          (reify
-                            MessageHandler
-                            (onMessage [_ client-message]
-                              (try
-                                (let [msg (-> client-message
-                                              message->bytes
-                                              deserialize)]
-                                  (loop []
-                                    (let [old-state @state
-                                          new-state (action mb
-                                                            reactor
-                                                            old-state
-                                                            msg)]
-                                      (when-not (compare-and-set! state
-                                                                  old-state
-                                                                  new-state)
-                                        (recur))))
-                                  (.acknowledge client-message))
-                                (catch Exception e
-                                  (if error-handler
-                                    (error-handler mb reactor @state e)
-                                    (throw e)))))))
+      (let [mh (message-handler mb action error-handler state reactor)]
+        (.setMessageHandler (get @(get-consumer-cache mb) queue)
+                            mh))
       nil))
   (get-queue [reactor]
     queue)
