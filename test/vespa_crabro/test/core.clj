@@ -34,7 +34,38 @@
       (testing "cloning"
         (with-open [mb2 (.clone mb)]
           (send-to mb2 "foo" {:x 1})
-          (is (nil? (receive-from mb "foo" (fn [x] (is (= x {:x 1})) nil))))))
+          (is (nil? (receive-from mb "foo"
+                                  (fn [x] (is (= x {:x 1})) nil)))))))))
+
+(deftest t-reactor
+  (binding [*in-vm-only* true]
+    (with-open [server (create-server)
+                mb (message-bus)]
+      (with-open [r (react-to mb "q" :foo)]
+        (is (= @r :foo))
+        (let [state-tracker (atom nil)]
+          (set-action r (fn [mb r state msg]
+                          (when (= msg ::boom)
+                            (throw (Exception. "boom")))
+                          (reset! state-tracker [state msg])
+                          :baz))
+          (set-error-handler r
+                             (fn [mb r state e]
+                               (reset! state-tracker e)))
+          (react! r)
+          (send-to mb "q" :bar)
+          (Thread/sleep 100)
+          (is (= @state-tracker [:foo :bar]))
+          (is (= @r :baz))
+          (send-to mb "q" ::boom)
+          (is (= @r :baz))
+          (Thread/sleep 100)
+          (is (thrown?  Exception (throw @state-tracker))))))))
+
+(deftest t-expiration
+  (binding [*in-vm-only* true]
+    (with-open [server (create-server)
+                mb (message-bus)]
       (testing "expiration"
         (send-to mb "foo" {:x 5} :expiration 1000)
         (send-to mb "foo" {:x 6})

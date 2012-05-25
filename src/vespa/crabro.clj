@@ -10,7 +10,7 @@
            (java.util Date UUID)
            (org.apache.commons.codec.binary Base64)
            (org.hornetq.api.core TransportConfiguration SimpleString)
-           (org.hornetq.api.core.client HornetQClient)
+           (org.hornetq.api.core.client HornetQClient MessageHandler)
            (org.hornetq.core.config.impl ConfigurationImpl)
            (org.hornetq.core.logging Logger)
            (org.hornetq.core.remoting.impl.netty NettyAcceptorFactory
@@ -22,6 +22,13 @@
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
 
+(defprotocol Reactor
+  (set-action [reactor fun]
+    "set the action to run on a message. action args are [messagebus this-reactor current-state new-state] actions may be run more than once for a message")
+  (set-error-handler [reactor fun]
+    "fun's args are [message-bus this-reactor state the-exception]")
+  (react! [reactor]))
+
 (defprotocol MessageBus
   (create-queue-fn [mb name opts])
   (create-tmp-queue-fn [mb name opts])
@@ -29,7 +36,8 @@
   (receive-from [mb name fun])
   (get-consumer-cache [mb])
   (get-producer [mb])
-  (declare-broadcast [mb queue]))
+  (declare-broadcast [mb queue])
+  (-react-to [mb queue init]))
 
 (defprotocol IHaveACookie
   (cookie [obj]))
@@ -237,9 +245,7 @@
             (-> .getBodyBuffer (.writeBytes (serialize msg))))]
     (.send (get-producer mb) name m)))
 
-(defn receive-from-fn [mb name fun]
-  (log-append (Date.) :trace (str @(get-consumer-cache mb)) *ns* nil)
-  (.start (get-session mb))
+(defn add-consumer [mb name]
   (swap! (get-consumer-cache mb)
          (fn [cache]
            (if (contains? cache name)
@@ -249,18 +255,86 @@
                  (create-queue mb name)
                  (catch Exception e
                    (log-append (Date.) :trace "failed to create-queue" *ns* e)))
-               (assoc cache name (.createConsumer (get-session mb) name))))))
+               (assoc cache name (.createConsumer (get-session mb) name)))))))
+
+(defn message->bytes [message]
+  (let [bb (.getBodyBuffer message)
+        buf (byte-array (.readableBytes bb))]
+    (.readBytes bb buf)
+    buf))
+
+(defn receive-from-fn [mb name fun]
+  (log-append (Date.) :trace (str @(get-consumer-cache mb)) *ns* nil)
+  (.start (get-session mb))
+  (add-consumer mb name)
   (let [c (get @(get-consumer-cache mb) name)]
     (if-let [m (.receive c)]
-      (let [bb (.getBodyBuffer m)
-            buf (byte-array (.readableBytes bb))]
-        (.readBytes bb buf)
-        (let [result (fun (deserialize buf))]
-          (.acknowledge m)
-          result))
+      (let [result (fun (deserialize (message->bytes m)))]
+        (.acknowledge m)
+        result)
       ::timeout)))
 
 (declare message-bus)
+
+
+(deftype AReactor [mb
+                   state
+                   ^:volatile-mutable action
+                   ^:volatile-mutable error-handler
+                   ^:volatile-mutable running?
+                   queue]
+  clojure.lang.IDeref
+  (deref [_] @state)
+  Reactor
+  (set-action [reactor fun]
+    (set! action (bound-fn* fun))
+    nil)
+  (set-error-handler [reactor fun]
+    (set! error-handler fun)
+    nil)
+  (react! [reactor]
+    (when (not running?)
+      (when (not action)
+        (throw (Exception. "no action")))
+      (.start (get-session mb))
+      (set! running? true)
+      (add-consumer mb queue)
+      (.setMessageHandler (get @(get-consumer-cache mb) queue)
+                          (reify
+                            MessageHandler
+                            (onMessage [_ client-message]
+                              (try
+                                (let [msg (-> client-message
+                                              message->bytes
+                                              deserialize)]
+                                  (loop []
+                                    (let [old-state @state
+                                          new-state (action mb
+                                                            reactor
+                                                            old-state
+                                                            msg)]
+                                      (when-not (compare-and-set! state
+                                                                  old-state
+                                                                  new-state)
+                                        (recur))))
+                                  (.acknowledge client-message))
+                                (catch Exception e
+                                  (if error-handler
+                                    (error-handler mb reactor @state e)
+                                    (throw e)))))))
+      nil))
+  Closeable
+  (close [_]
+    (.close mb)))
+
+(defn react-to
+  "returns a Reactor built from the given messagebus
+  Reactors are for listening attaching listeners to queues
+  use set-action and set-error-handler on the reactor "
+  ([mb queue]
+     (react-to mb queue nil))
+  ([mb queue init]
+     (-react-to mb queue init)))
 
 (deftype AMessageBus [session session-factory producer consumer-cache cookie]
   MessageBus
@@ -290,6 +364,13 @@
                  (assoc cache
                    address (.createConsumer (get-session mb) queue-name))))))
     nil)
+  (-react-to [mb queue init]
+    (AReactor. (.clone mb)
+               (atom init)
+               nil
+               nil
+               false
+               queue))
   IHaveASession
   (get-session [mb] session)
   Object
@@ -299,6 +380,8 @@
     (message-bus cookie session-factory))
   Closeable
   (close [mb]
+    (doseq [[_ consumer] @consumer-cache]
+      (.close consumer))
     (.stop session)
     (.close session))
   IHaveACookie

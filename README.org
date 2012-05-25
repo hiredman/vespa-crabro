@@ -23,13 +23,34 @@ java -jar vespa-crabro-0.2.0-standalone.jar :host $HOSTNAME :port $PORT
 (receive-from mb "foo" println)
 ;; {:a 1, :b 2}
 ;=> nil
+(react-to mb "foo")
+;=> #<AReactor@602703: nil>
+(def r *1)
+;=> #'vespa.crabro/r
+(set-action r (fn [mb r state msg] msg))
+;=> nil
+(react! r)
+;=> nil
+r
+;=> <AReactor@602703: nil>
+(send-to mb "foo" 1)
+;=> nil
+r
+;=> #<AReactor@602703: 1>
+(send-to mb "foo" 2)
+;=> nil
+r
+;=> #<AReactor@602703: 2>
 #+END_SRC
   - the "cookie" is a clojure map of connection parameters.
     create-server will write the cookied to user.home and message-bus
     will read the cookie from there. create-server takes a number of
     options to configure the port and host, etc.
-
+* Logging
+  - logging for the server logs to a ring buffer
+  - vespa.logging/log
 * Todo
+  - some kind of clustering of servers
   - Decompose and Expose
     - give access to hornetq internals
     - make easy ramp up from vespa-crabro to using hornetq api directly
