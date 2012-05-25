@@ -2,7 +2,6 @@
   (:use [clojure.java.io :only [file]]
         [vespa.logging :only [log-append log-delegate-factory
                               log-delegate-factory-classname]]
-        [vespa.protocols]
         [vespa.rest :only [rest-server]])
   (:require [vespa.logging])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
@@ -22,6 +21,21 @@
            (org.hornetq.core.server HornetQComponent)
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
+
+(defprotocol MessageBus
+  (create-queue-fn [mb name opts])
+  (create-tmp-queue-fn [mb name opts])
+  (send-to-fn [mb name msg opts])
+  (receive-from [mb name fun])
+  (get-consumer-cache [mb])
+  (get-producer [mb])
+  (declare-broadcast [mb queue]))
+
+(defprotocol IHaveACookie
+  (cookie [obj]))
+
+(defprotocol IHaveASession
+  (get-session [obj]))
 
 (def ^{:dynamic true} *in-vm-only* false)
 

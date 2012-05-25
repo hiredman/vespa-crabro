@@ -1,6 +1,5 @@
 (ns vespa.streams
-  (:require [vespa.protocols :as vp]
-            [vespa.crabro :as vc])
+  (:require [vespa.crabro :as vc])
   (:import (java.io OutputStream
                     ByteArrayInputStream
                     SequenceInputStream
@@ -46,12 +45,12 @@
    (seq->enumeration
     ((fn x []
        (lazy-seq
-        (loop [r (vp/receive-from mb queue identity)]
+        (loop [r (vc/receive-from mb queue identity)]
           (cond
            (= :vespa.crabro/timeout r)
            (do
              (Thread/sleep wait)
-             (recur (vp/receive-from mb queue identity)))
+             (recur (vc/receive-from mb queue identity)))
            (not= :eof r)
            (cons (ByteArrayInputStream. r) (x))
            :else

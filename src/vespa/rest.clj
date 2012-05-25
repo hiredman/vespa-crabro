@@ -1,6 +1,5 @@
 (ns vespa.rest
-  (:use [vespa.protocols]
-        [vespa.logging :only [log]]
+  (:use [vespa.logging :only [log]]
         [vespa.remoting :only [in-vm-locator]])
   (:import (org.hornetq.rest.integration EmbeddedRestHornetQ)
            (org.hornetq.rest.queue QueueDeployment DestinationSettings
