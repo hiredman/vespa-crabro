@@ -18,7 +18,11 @@
                                                  NettyConnectorFactory)
            (org.hornetq.core.remoting.impl.invm InVMAcceptorFactory
                                                 InVMConnectorFactory)
-           (org.hornetq.api.core.client ClientMessage)
+           (org.hornetq.api.core.client ClientMessage
+                                        ClientSession
+                                        ClientSessionFactory
+                                        ClientConsumer
+                                        ClientProducer)
            (org.hornetq.core.server HornetQComponent)
            (org.hornetq.core.server.embedded EmbeddedHornetQ)
            (org.hornetq.spi.core.security HornetQSecurityManager)))
@@ -39,7 +43,7 @@
   (send-to-fn [mb name msg opts])
   (receive-from [mb name fun])
   (get-consumer-cache [mb])
-  (get-producer [mb])
+  (^ClientProducer get-producer [mb])
   (declare-broadcast [mb queue])
   (-react-to [mb queue init]))
 
@@ -47,7 +51,7 @@
   (cookie [obj]))
 
 (defprotocol IHaveASession
-  (get-session [obj]))
+  (^ClientSession get-session [obj]))
 
 (def ^{:dynamic true
        :doc "bind to true to create in-vm servers and message-buses"}
@@ -235,7 +239,7 @@
 
 (declare send-to)
 
-(defn send-to-fn-fn [mb name msg opts]
+(defn send-to-fn-fn [mb ^String name msg opts]
   (try
     ;; would rather not do this, but if I don't queues need to be
     ;; declared up front
@@ -253,7 +257,7 @@
             (-> .getBodyBuffer (.writeBytes (serialize msg))))]
     (.send (get-producer mb) name m)))
 
-(defn add-consumer [mb name]
+(defn add-consumer [mb ^String name]
   (swap! (get-consumer-cache mb)
          (fn [cache]
            (if (contains? cache name)
@@ -265,7 +269,7 @@
                    (log-append (Date.) :trace "failed to create-queue" *ns* e)))
                (assoc cache name (.createConsumer (get-session mb) name)))))))
 
-(defn message->bytes [message]
+(defn message->bytes [^ClientMessage message]
   (let [bb (.getBodyBuffer message)
         buf (byte-array (.readableBytes bb))]
     (.readBytes bb buf)
@@ -275,8 +279,8 @@
   (log-append (Date.) :trace (str @(get-consumer-cache mb)) *ns* nil)
   (.start (get-session mb))
   (add-consumer mb name)
-  (let [c (get @(get-consumer-cache mb) name)]
-    (if-let [m (.receive c)]
+  (let [^ClientConsumer c (get @(get-consumer-cache mb) name)]
+    (if-let [^ClientMessage m (.receive c)]
       (let [result (fun (deserialize (message->bytes m)))]
         (.acknowledge m)
         result)
@@ -352,8 +356,8 @@
       (.start (get-session mb))
       (set! running? true)
       (add-consumer mb queue)
-      (let [mh (message-handler mb action error-handler state reactor)]
-        (.setMessageHandler (get @(get-consumer-cache mb) queue)
+      (let [mh (message-handler mb state reactor)]
+        (.setMessageHandler ^ClientConsumer (get @(get-consumer-cache mb) queue)
                             mh))
       nil))
   (get-queue [reactor]
@@ -364,7 +368,7 @@
     error-handler)
   Closeable
   (close [_]
-    (.close ^Closeable mb)))
+    (.close ^Cloneable mb)))
 
 (defn react-to
   "returns a Reactor built from the given messagebus
@@ -384,12 +388,16 @@
          (set-error-handler r (:error-handler options)))
        r)))
 
-(deftype AMessageBus [session session-factory producer consumer-cache cookie]
+(deftype AMessageBus [^ClientSession session
+                      session-factory
+                      producer
+                      consumer-cache
+                      cookie]
   MessageBus
   (create-queue-fn [mb name opts]
-    (.createQueue session name name))
+    (.createQueue session ^String name ^String name))
   (create-tmp-queue-fn [mb name opts]
-    (.createTemporaryQueue session name name))
+    (.createTemporaryQueue session ^String name ^String name))
   (send-to-fn [mb name msg opts]
     (send-to-fn-fn mb name msg opts))
   (receive-from [mb name fun]
@@ -398,8 +406,8 @@
   (get-producer [mb] producer)
   ;; needs a better name
   (declare-broadcast [mb queue]
-    (let [queue-name (str queue "." (UUID/randomUUID))
-          address queue]
+    (let [^String queue-name (str queue "." (UUID/randomUUID))
+          ^String address queue]
       (try
         (.createTemporaryQueue session address queue-name)
         (catch Exception e
@@ -410,7 +418,8 @@
                (if (contains? cache address)
                  cache
                  (assoc cache
-                   address (.createConsumer (get-session mb) queue-name))))))
+                   address (.createConsumer ^ClientSession (get-session mb)
+                                            ^String queue-name))))))
     nil)
   (-react-to [mb queue init]
     (AReactor. (.clone mb)
@@ -430,7 +439,7 @@
     (message-bus cookie session-factory))
   Closeable
   (close [mb]
-    (doseq [[_ consumer] @consumer-cache]
+    (doseq [[_ ^ClientConsumer consumer] @consumer-cache]
       (.close consumer))
     (.stop session)
     (.close session))
@@ -446,12 +455,12 @@
              sf (create-session-factory host port (when *in-vm-only* :invm))]
          (message-bus cookie-or-map sf))
        (message-bus (read-string cookie-or-map))))
-  ([m session-factory]
+  ([m ^ClientSessionFactory session-factory]
      (let [{:keys [host port username password]} m
            s (.createSession
               session-factory username password false true true false 1)]
        (message-bus s session-factory m)))
-  ([session session-factory cookie]
+  ([^ClientSession session session-factory cookie]
      (message-bus
       session session-factory (.createProducer session) (atom {}) cookie))
   ([session session-factory producer consumer-cache cookie]
