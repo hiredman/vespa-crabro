@@ -66,7 +66,10 @@
 
 (defn safe-compiler-loader []
   (try
-    @clojure.lang.Compiler/LOADER
+    (let [c clojure.lang.Compiler/LOADER]
+      (if (bound? c)
+        @c
+        (.getContextClassLoader (Thread/currentThread))))
     (catch Exception _
       (.getContextClassLoader (Thread/currentThread)))))
 
