@@ -50,7 +50,7 @@
                           (reset! state-tracker [state msg])
                           :baz))
           (set-error-handler r
-                             (fn [mb r state e]
+                             (fn [mb r state e client-message]
                                (reset! state-tracker e)))
           (react! r)
           (send-to mb "q" :bar)
