@@ -38,9 +38,9 @@
   (get-error-handler [reactor]))
 
 (defprotocol MessageBus
-  (create-queue-fn [mb name opts])
-  (create-tmp-queue-fn [mb name opts])
-  (send-to-fn [mb name msg opts])
+  (-create-queue [mb name opts])
+  (-create-tmp-queue [mb name opts])
+  (-send-to [mb name msg opts])
   (receive-from [mb name fun])
   (get-consumer-cache [mb])
   (^ClientProducer get-producer [mb])
@@ -231,21 +231,17 @@
               (.setMinLargeMessageSize 52428800))]
     (.createSessionFactory loc)))
 
-(defn create-queue [mb name & {:as opts}]
-  (create-queue-fn mb name opts))
 
-(defn create-tmp-queue [mb name & {:as opts}]
-  (create-tmp-queue-fn mb name opts))
 
-(declare send-to)
+(declare send-to create-queue)
 
-(defn send-to-fn-fn [mb ^String name msg opts]
+(defn -send-to-fn [mb ^String name msg opts]
   (try
     ;; would rather not do this, but if I don't queues need to be
     ;; declared up front
     ;; possibly split out 2 sets of fns for point-to-point and pubsub messaging
     (when-not (get @(get-consumer-cache mb) name)
-      (create-tmp-queue-fn mb name opts))
+      (-create-tmp-queue mb name opts))
     (catch Exception e
       (log-append (Date.) :trace "failed to create-queue" *ns* e)))
   (let [m (doto (.createMessage (get-session mb)
@@ -370,36 +366,18 @@
   (close [_]
     (.close ^Cloneable mb)))
 
-(defn react-to
-  "returns a Reactor built from the given messagebus
-  Reactors are for listening attaching listeners to queues
-  use set-action and set-error-handler on the reactor "
-  ([mb queue]
-     (react-to mb queue nil))
-  ([mb queue & args]
-     (let [options (if (and (> (count args) 1)
-                            (keyword? (first args)))
-                     (apply hash-map args)
-                     {:init (first args)})
-           r (-react-to mb queue (:init options))]
-       (when (:action options)
-         (set-action r (:action options)))
-       (when (:error-handler options)
-         (set-error-handler r (:error-handler options)))
-       r)))
-
 (deftype AMessageBus [^ClientSession session
                       session-factory
                       producer
                       consumer-cache
                       cookie]
   MessageBus
-  (create-queue-fn [mb name opts]
+  (-create-queue [mb name opts]
     (.createQueue session ^String name ^String name))
-  (create-tmp-queue-fn [mb name opts]
+  (-create-tmp-queue [mb name opts]
     (.createTemporaryQueue session ^String name ^String name))
-  (send-to-fn [mb name msg opts]
-    (send-to-fn-fn mb name msg opts))
+  (-send-to [mb name msg opts]
+    (-send-to-fn mb name msg opts))
   (receive-from [mb name fun]
     (receive-from-fn mb name fun))
   (get-consumer-cache [mb] consumer-cache)
@@ -467,4 +445,28 @@
      (AMessageBus. session session-factory producer consumer-cache cookie)))
 
 (defn send-to [mb name msg & {:as opts}]
-  (send-to-fn mb name msg opts))
+  (-send-to mb name msg opts))
+
+(defn create-queue [mb name & {:as opts}]
+  (-create-queue mb name opts))
+
+(defn create-tmp-queue [mb name & {:as opts}]
+  (-create-tmp-queue mb name opts))
+
+(defn react-to
+  "returns a Reactor built from the given messagebus
+  Reactors are for listening attaching listeners to queues
+  use set-action and set-error-handler on the reactor "
+  ([mb queue]
+     (react-to mb queue nil))
+  ([mb queue & args]
+     (let [options (if (and (> (count args) 1)
+                            (keyword? (first args)))
+                     (apply hash-map args)
+                     {:init (first args)})
+           r (-react-to mb queue (:init options))]
+       (when (:action options)
+         (set-action r (:action options)))
+       (when (:error-handler options)
+         (set-error-handler r (:error-handler options)))
+       r)))
