@@ -294,7 +294,7 @@
     (set! action (bound-fn* fun))
     nil)
   (set-error-handler [reactor fun]
-    (set! error-handler fun)
+    (set! error-handler (bound-fn* fun))
     nil)
   (react! [reactor]
     (when (not running?)
