@@ -7,6 +7,7 @@
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable File
                     ObjectInputStream ObjectOutputStream)
            (java.net InetAddress)
+           (clojure.lang IRef)
            (java.util Date UUID)
            (org.apache.commons.codec.binary Base64)
            (org.hornetq.api.core TransportConfiguration SimpleString)
@@ -28,7 +29,9 @@
   (set-error-handler [reactor fun]
     "fun's args are [message-bus this-reactor state the-exception]")
   (react! [reactor])
-  (get-queue [reactor]))
+  (get-queue [reactor])
+  (get-action [reactor])
+  (get-error-handler [reactor]))
 
 (defprotocol MessageBus
   (create-queue-fn [mb name opts])
@@ -281,28 +284,35 @@
 
 (declare message-bus)
 
-(defn message-handler [mb action error-handler state reactor]
+(defn ^MessageHandler message-handler [mb state ^IRef reactor]
   (reify
     MessageHandler
-    (onMessage [_ client-message]
+    (^void onMessage [_ ^ClientMessage client-message]
       (try
         (let [msg (-> client-message
                       message->bytes
                       deserialize)]
           (loop []
             (let [old-state @state
-                  new-state (action mb
-                                    reactor
+                  new-state ((get-action reactor)
+                             mb
+                             reactor
+                             old-state
+                             msg)]
+              (when-let [v (.getValidator reactor)]
+                (when (false? (v new-state))
+                  (throw (IllegalStateException. "validator failed"))))
+              (if (compare-and-set! state
                                     old-state
-                                    msg)]
-              (when-not (compare-and-set! state
-                                          old-state
-                                          new-state)
-                (recur))))
-          (.acknowledge client-message))
+                                    new-state)
+                (do
+                  (doseq [[k fun] (.getWatches reactor)]
+                    (fun k reactor old-state new-state))
+                  (.acknowledge client-message))
+                (recur)))))
         (catch Exception e
-          (if error-handler
-            (error-handler mb reactor @state client-message e)
+          (if-let [eh (get-error-handler reactor)]
+            (eh mb reactor @state client-message e)
             (throw e)))))))
 
 (deftype AReactor [mb
@@ -310,7 +320,22 @@
                    ^:volatile-mutable action
                    ^:volatile-mutable error-handler
                    ^:volatile-mutable running?
+                   ^:volatile-mutable validator
+                   ^java.util.Map watches
                    queue]
+  IRef
+  (setValidator [rb vf]
+    (set! validator vf))
+  (getValidator [_]
+    validator)
+  (getWatches [_]
+    (into {} watches))
+  (addWatch [this key callback]
+    (.put watches key callback)
+    this)
+  (removeWatch [this key]
+    (.remove watches key)
+    this)
   clojure.lang.IDeref
   (deref [_] @state)
   Reactor
@@ -333,9 +358,13 @@
       nil))
   (get-queue [reactor]
     queue)
+  (get-action [reactor]
+    action)
+  (get-error-handler [reactor]
+    error-handler)
   Closeable
   (close [_]
-    (.close mb)))
+    (.close ^Closeable mb)))
 
 (defn react-to
   "returns a Reactor built from the given messagebus
@@ -389,6 +418,8 @@
                nil
                nil
                false
+               nil
+               (java.util.concurrent.ConcurrentHashMap.)
                queue))
   IHaveASession
   (get-session [mb] session)
