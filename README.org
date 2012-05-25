@@ -3,7 +3,10 @@
   - dirt simple distributed message queues for clojure, built on hornetq
 
 * Usage
-  - the client can add [vespa-crabro "0.2.0"] to your project.clj
+  - the client can vespa-crabro to your project.clj
+#+BEGIN_EXAMPLE
+[vespa-crabro "0.2.0"]
+#+END_EXAMPLE
   - from the jar:
 #+BEGIN_EXAMPLE
 java -jar vespa-crabro-0.2.0-standalone.jar :host $HOSTNAME :port $PORT
