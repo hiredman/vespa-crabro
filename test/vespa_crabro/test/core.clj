@@ -51,6 +51,7 @@
                           :baz))
           (set-error-handler r
                              (fn [mb r state e client-message]
+                               (.acknowledge client-message)
                                (reset! state-tracker e)))
           (react! r)
           (send-to mb "q" :bar)
