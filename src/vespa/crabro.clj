@@ -45,9 +45,13 @@
 (defprotocol IHaveASession
   (get-session [obj]))
 
-(def ^{:dynamic true} *in-vm-only* false)
+(def ^{:dynamic true
+       :doc "bind to true to create in-vm servers and message-buses"}
+  *in-vm-only* false)
 
-(def ^{:dynamic true} *rest-interface* false)
+(def ^{:dynamic true
+       :doc "bind to true to launch hornetq's rest interface"}
+  *rest-interface* false)
 
 (defn read-coookie []
   (read-string (slurp (file (System/getProperty "user.dir") ".vespa-cookie"))))
