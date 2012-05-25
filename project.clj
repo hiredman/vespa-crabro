@@ -1,4 +1,4 @@
-(defproject vespa-crabro "1.0.0-SNAPSHOT"
+(defproject vespa-crabro "0.2.0"
   :description "easy distribution for clojure"
   :repositories {"jboss4" "http://repository.jboss.org/nexus/content/groups/public-jboss/"
                  "hornetq" "http://hornetq.s3.amazonaws.com/"}
